@@ -90,7 +90,7 @@ class VocosFrontend(
             for (f in 0 until nFreq) {
                 acc += magnitude[f].toDouble() * melFilterbank[base + f].toDouble()
             }
-            val clamped = if (acc < DspConstants.MEL_MIN) DspConstants.MEL_MIN else acc
+            val clamped = if (acc < DspConstants.MEL_MIN) DspConstants.MEL_MIN.toDouble() else acc
             mel[m] = ln(clamped).toFloat()
         }
         return mel

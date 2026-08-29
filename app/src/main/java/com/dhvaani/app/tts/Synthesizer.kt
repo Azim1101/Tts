@@ -118,7 +118,7 @@ class Synthesizer(
             val dt = t[i + 1] - t[i]
             val vOut = engine.fmDecoder(t[i], x, textCondition, speechCondition, guidance)
             for (j in x.indices) {
-                x[j] += vOut[j] * dt
+                x[j] = x[j] + vOut[j] * dt
             }
             onProgress(i + 1, steps)
         }

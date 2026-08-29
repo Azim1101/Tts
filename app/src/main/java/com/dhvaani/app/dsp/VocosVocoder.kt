@@ -109,8 +109,8 @@ class VocosVocoder(
                 val idx = start + k
                 if (idx < 0 || idx >= outLen) continue
                 val w = win[k]
-                out[idx] += frameTd[k] * w
-                wsum[idx] += w * w
+                out[idx] = out[idx] + frameTd[k] * w
+                wsum[idx] = wsum[idx] + w * w
             }
         }
 

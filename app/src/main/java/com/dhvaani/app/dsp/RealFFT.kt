@@ -66,8 +66,8 @@ object RealFFT {
 
         if (inverse) {
             for (i in 0 until n) {
-                re[i] /= n
-                im[i] /= n
+                re[i] = re[i] / n
+                im[i] = im[i] / n
             }
         }
     }
