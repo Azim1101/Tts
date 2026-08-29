@@ -1,0 +1,41 @@
+<resources>
+    <string name="app_name">ध्वनि</string>
+
+    <string name="section_reference">1. संदर्भ आवाज़</string>
+    <string name="btn_record">🔴 रिकॉर्ड</string>
+    <string name="btn_stop">⏹ बंद</string>
+    <string name="btn_play_ref">▶ संदर्भ सुनें</string>
+    <string name="btn_import">📁 आयात करें</string>
+
+    <string name="label_ref_transcript">संदर्भ का पाठ (रिकॉर्डिंग में क्या कहा गया)</string>
+    <string name="default_ref_transcript">यह एक संदर्भ आवाज़ है।</string>
+    <string name="label_target_text">लक्ष्य पाठ (जो बोलना है)</string>
+    <string name="default_target_text">नमस्ते, यह ध्वनि आपकी आवाज़ में बोली गई है।</string>
+
+    <string name="label_steps">चरण</string>
+    <string name="label_guidance">मार्गदर्शन</string>
+    <string name="label_speed">गति</string>
+
+    <string name="btn_synthesize">✨ संश्लेषण</string>
+    <string name="btn_play_result">▶ परिणाम सुनें</string>
+    <string name="btn_stop_result">⏹ बंद</string>
+    <string name="btn_save">💾 सहेजें</string>
+
+    <string name="status_ready">तैयार।</string>
+    <string name="status_recording">रिकॉर्डिंग…</string>
+    <string name="status_loading_models">मॉडल लोड हो रहे हैं…</string>
+    <string name="status_synthesizing">संश्लेषण… चरण %1$d/%2$d</string>
+    <string name="status_done">पूर्ण: %1$s (RTF %2$s)</string>
+    <string name="status_saved">Music/DhVaani में सहेजा गया</string>
+
+    <string name="err_empty_ref">पहले संदर्भ आवाज़ रिकॉर्ड या आयात करें।</string>
+    <string name="err_empty_transcript">संदर्भ पाठ खाली है।</string>
+    <string name="err_empty_target">लक्ष्य पाठ खाली है।</string>
+    <string name="err_no_tokens">लक्ष्य में कोई भी अक्षर शब्दकोश में नहीं है। देवनागरी पाठ जोड़ें।</string>
+    <string name="err_ref_longer">संदर्भ लक्ष्य से लंबा है — संदर्भ छोटा करें (3–8 सेकंड) या लक्ष्य लंबा करें।</string>
+    <string name="err_models_missing">मॉडल फ़ाइलें नहीं मिलीं। scripts/download_models.sh चलाएँ।</string>
+    <string name="err_runtime">त्रुटि: %1$s</string>
+
+    <string name="consent_notice" translatable="false">⚠️ नैतिकता सूचना — केवल उस आवाज़ का क्लोन बनाएँ जिसके आप मालिक हैं या जिसकी स्पष्ट अनुमति हो। बिना अनुमति आवाज़ क्लोन करना धोखाधड़ी बन सकता है। परिणाम "संश्लेषित" चिह्नित है। जिम्मेदारी से उपयोग करें।</string>
+    <string name="made_synth">ध्वनि द्वारा संश्लेषित (ऑन-डिवाइस, ऑफ़लाइन)।</string>
+</resources>

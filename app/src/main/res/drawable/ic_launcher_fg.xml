@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Simple waveform glyph on a transparent foreground layer.
+     The adaptive icon background is the app's primary colour. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- rounded speech-bubble -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M30,34 h48 a6,6 0 0 1 6,6 v20 a6,6 0 0 1 -6,6 h-26 l-10,10 v-10 h-12 a6,6 0 0 1 -6,-6 v-20 a6,6 0 0 1 6,-6 z" />
+    <!-- waveform bars -->
+    <path
+        android:fillColor="#6750A4"
+        android:pathData="M40,46 v8 M48,42 v16 M56,44 v12 M64,40 v24 M72,45 v10" />
+</vector>

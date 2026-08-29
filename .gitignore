@@ -1,0 +1,30 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+!gradlew
+!gradlew.bat
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+local.properties
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+
+# Model assets are downloaded by scripts/download_models.sh, not committed.
+app/src/main/assets/*.onnx
+app/src/main/assets/*.npz
+app/src/main/assets/*.bin
+app/src/main/assets/tokens.txt
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# OS
+.DS_Store

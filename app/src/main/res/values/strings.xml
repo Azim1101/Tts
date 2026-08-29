@@ -1,0 +1,40 @@
+<resources>
+    <string name="app_name">DhVaani</string>
+
+    <string name="section_reference">1. Reference voice</string>
+    <string name="btn_record">🔴 Record</string>
+    <string name="btn_stop">⏹ Stop</string>
+    <string name="btn_play_ref">▶ Play ref</string>
+    <string name="btn_import">📁 Import</string>
+    <string name="label_ref_transcript">Reference transcript (what the recording says)</string>
+    <string name="default_ref_transcript">यह एक संदर्भ आवाज़ है।</string>
+    <string name="label_target_text">Target text (to speak)</string>
+    <string name="default_target_text">नमस्ते, यह ध्वनि आपकी आवाज़ में बोली गई है।</string>
+
+    <string name="label_steps">Steps</string>
+    <string name="label_guidance">Guidance</string>
+    <string name="label_speed">Speed</string>
+
+    <string name="btn_synthesize">✨ Synthesize</string>
+    <string name="btn_play_result">▶ Play result</string>
+    <string name="btn_stop_result">⏹ Stop</string>
+    <string name="btn_save">💾 Save</string>
+
+    <string name="status_ready">Ready.</string>
+    <string name="status_recording">Recording…</string>
+    <string name="status_loading_models">Loading models…</string>
+    <string name="status_synthesizing">Synthesizing… step %1$d/%2$d</string>
+    <string name="status_done">Done in %1$s (RTF %2$s)</string>
+    <string name="status_saved">Saved to Music/DhVaani</string>
+
+    <string name="err_empty_ref">No reference audio. Record or import one first.</string>
+    <string name="err_empty_transcript">Reference transcript is empty.</string>
+    <string name="err_empty_target">Target text is empty.</string>
+    <string name="err_no_tokens">No characters in the target are in the vocabulary. Add Devanagari text.</string>
+    <string name="err_ref_longer">Reference is longer than the target audio — shorten the reference (3–8 s) or lengthen the target.</string>
+    <string name="err_models_missing">Model files missing. Run scripts/download_models.sh (or install the app with models bundled).</string>
+    <string name="err_runtime">Error: %1$s</string>
+
+    <string name="consent_notice">⚠️ ETHICS NOTICE — Only use this tool to clone a voice you own or have explicit permission to use. Cloning a person\'s voice without consent can enable impersonation and is against the law in many places. Output is labelled as synthesized. Use responsibly.</string>
+    <string name="made_synth">Synthesized by DhVaani (on-device, offline).</string>
+</resources>
