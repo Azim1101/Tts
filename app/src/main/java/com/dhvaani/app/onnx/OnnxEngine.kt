@@ -74,16 +74,16 @@ class OnnxEngine(
             opts.setIntraOpNumThreads(threads)
             opts.setInterOpNumThreads(threads)
             // Memory pattern optimization lets ORT reuse pre-allocated buffers
-            // across inferences — the FM-decoder loop runs `steps` times, so a
-            // lot of allocations can be folded.
-            try { opts.setMemoryPatternOptimization(true) } catch (_: Exception) {}
+            // across inferences. Some ORT Android AARs throw (Error, not
+            // Exception) when the option is unsupported, so we catch Throwable.
+            try { opts.setMemoryPatternOptimization(true) } catch (_: Throwable) {}
             // CPU arena allocator keeps a small pool and avoids malloc/free churn.
-            try { opts.setCPUArenaAllocator(true) } catch (_: Exception) {}
+            try { opts.setCPUArenaAllocator(true) } catch (_: Throwable) {}
             val xnnOpts = HashMap<String, String>()
             xnnOpts["intra_op_num_threads"] = threads.toString()
             opts.addXnnpack(xnnOpts)
             val session = env.createSession(path, opts)
-            try { opts.close() } catch (_: Exception) {}
+            try { opts.close() } catch (_: Throwable) {}
             val ms = SystemClock.elapsedRealtime() - t0
             Log.i(TAG, "createSession($label): XNNPACK OK (threads=$threads, ${ms}ms)")
             return session
@@ -100,10 +100,10 @@ class OnnxEngine(
         opts.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
         opts.setIntraOpNumThreads(threads)
         opts.setInterOpNumThreads(threads)
-        try { opts.setMemoryPatternOptimization(true) } catch (_: Exception) {}
-        try { opts.setCPUArenaAllocator(true) } catch (_: Exception) {}
+        try { opts.setMemoryPatternOptimization(true) } catch (_: Throwable) {}
+        try { opts.setCPUArenaAllocator(true) } catch (_: Throwable) {}
         val session = env.createSession(path, opts)
-        try { opts.close() } catch (_: Exception) {}
+        try { opts.close() } catch (_: Throwable) {}
         val ms = SystemClock.elapsedRealtime() - t0
         Log.i(TAG, "createSession($label): CPU OK (threads=$threads, ${ms}ms)")
         return session
