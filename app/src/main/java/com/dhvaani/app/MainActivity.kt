@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import android.os.SystemClock
+import android.util.Log
 import android.view.View
 import android.widget.ArrayAdapter
 import android.widget.Toast
@@ -293,13 +294,31 @@ class MainActivity : AppCompatActivity() {
                 downloadModels()
                 return
             }
-            val eng = OnnxEngine(models.encoderPath, models.fmDecoderPath, models.vocoderBackbonePath)
-            val tokenizer = mgr.loadTokenizer()
-            val melFb = mgr.loadMelFb()
-            val vocosHead = mgr.loadVocosHead()
-            val frontend = VocosFrontend(melFb.fb, melFb.window, melFb.nFft, melFb.hop, melFb.nMels)
-            val vocoder = VocosVocoder(eng, vocosHead)
-            val syn = Synthesizer(eng, tokenizer, frontend, vocoder)
+            Log.i("DhVaani", "loadModels: files present, creating engine")
+            val eng = try {
+                OnnxEngine(models.encoderPath, models.fmDecoderPath, models.vocoderBackbonePath)
+            } catch (e: Throwable) {
+                Log.e("DhVaani", "OnnxEngine ctor failed", e)
+                throw e
+            }
+            val tokenizer = try { mgr.loadTokenizer() } catch (e: Throwable) {
+                Log.e("DhVaani", "loadTokenizer failed", e); throw e
+            }
+            val melFb = try { mgr.loadMelFb() } catch (e: Throwable) {
+                Log.e("DhVaani", "loadMelFb failed", e); throw e
+            }
+            val vocosHead = try { mgr.loadVocosHead() } catch (e: Throwable) {
+                Log.e("DhVaani", "loadVocosHead failed", e); throw e
+            }
+            val frontend = try { VocosFrontend(melFb.fb, melFb.window, melFb.nFft, melFb.hop, melFb.nMels) } catch (e: Throwable) {
+                Log.e("DhVaani", "VocosFrontend ctor failed", e); throw e
+            }
+            val vocoder = try { VocosVocoder(eng, vocosHead) } catch (e: Throwable) {
+                Log.e("DhVaani", "VocosVocoder ctor failed", e); throw e
+            }
+            val syn = try { Synthesizer(eng, tokenizer, frontend, vocoder) } catch (e: Throwable) {
+                Log.e("DhVaani", "Synthesizer ctor failed", e); throw e
+            }
             runOnUiThread {
                 engine = eng
                 synthesizer = syn
@@ -307,15 +326,16 @@ class MainActivity : AppCompatActivity() {
                 binding.btnDownloadModels.visibility = View.GONE
                 binding.btnSynthesize.isEnabled = true
             }
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             // Any exception during model load means the synthesizer is in an
             // inconsistent state. Show the error, KEEP Synthesize disabled, and
             // bring the "Download models" button back so the user can recover.
+            Log.e("DhVaani", "loadModels failed", e)
             runOnUiThread {
                 binding.btnSynthesize.isEnabled = false
                 binding.btnDownloadModels.visibility = View.VISIBLE
                 binding.btnDownloadModels.isEnabled = true
-                fail(getString(R.string.err_runtime, e.message ?: "load"))
+                fail(getString(R.string.err_runtime, e.message ?: e::class.java.simpleName))
             }
         }
     }

@@ -3,6 +3,7 @@ package com.dhvaani.app.onnx
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
+import android.util.Log
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
@@ -31,13 +32,12 @@ class OnnxEngine(
 
     init {
         // Each graph is created independently so a failing provider on one model
-        // (e.g. NNAPI not supporting a few ops) never breaks the others. ORT tries
-        // the registered providers in order — GPU/DSP first (NNAPI), then the
-        // vectorised CPU provider (XNNPACK), then a plain CPU session — and falls
-        // back to the next one if createSession throws.
-        encoder = createSessionSafe(encoderPath)
-        fmDecoder = createSessionSafe(fmDecoderPath)
-        vocoderBackbone = createSessionSafe(vocoderBackbonePath)
+        // (e.g. NNAPI not supporting a few ops) never breaks the others.
+        Log.i(TAG, "OnnxEngine init: encoder=$encoderPath fm=$fmDecoderPath vocoder=$vocoderBackbonePath")
+        encoder = createSessionSafe(encoderPath, "encoder")
+        fmDecoder = createSessionSafe(fmDecoderPath, "fm_decoder")
+        vocoderBackbone = createSessionSafe(vocoderBackbonePath, "vocoder_backbone")
+        Log.i(TAG, "OnnxEngine init: all three sessions created")
     }
 
     /**
@@ -48,10 +48,12 @@ class OnnxEngine(
      *                  be unsupported -> ORT falls back to CPU for those, and on some
      *                  devices results can differ). Kept as a secondary preference.
      *   - "CPU"     -> plain CPU fallback.
-     * To force NNAPI first (test on your device) move "NNAPI" to the front; to
-     * disable it entirely, remove the "NNAPI" entry.
      */
     private val providerPriority = listOf("XNNPACK", "NNAPI", "CPU")
+
+    private companion object {
+        private const val TAG = "DhVaani.Ort"
+    }
 
     private fun baseOptions(): OrtSession.SessionOptions {
         val opts = OrtSession.SessionOptions()
@@ -61,20 +63,39 @@ class OnnxEngine(
         return opts
     }
 
-    private fun createSessionSafe(path: String): OrtSession {
-        var lastError: Exception? = null
+    /**
+     * Try to create an ORT session, falling back through execution providers if
+     * one fails. Each attempt uses a FRESH [OrtSession.SessionOptions] so a
+     * partially-mutated options object from a previous attempt cannot corrupt
+     * the next one (which used to cause "Attempt to invoke interface method
+     * 'java.util.List.iterator()' on a null object reference" when
+     * `addXnnpack(emptyMap())` was called on an options object that
+     * `addNnapi()` had already modified and we then tried to close+reuse).
+     */
+    private fun createSessionSafe(path: String, label: String): OrtSession {
+        var lastError: Throwable? = null
         for (provider in providerPriority) {
             val opts = baseOptions()
             try {
                 when (provider) {
                     "NNAPI" -> opts.addNnapi()
-                    "XNNPACK" -> opts.addXnnpack(emptyMap())
+                    "XNNPACK" -> {
+                        // HashMap (mutable) is what every ORT example uses; passing
+                        // Kotlin's `emptyMap()` (a SingletonMap) was the suspected
+                        // source of a List.iterator() NPE on some Android versions.
+                        val xnnOpts = HashMap<String, String>()
+                        xnnOpts["intra_op_num_threads"] = threads.toString()
+                        opts.addXnnpack(xnnOpts)
+                    }
                     else -> { /* plain CPU */ }
                 }
+                Log.i(TAG, "createSession($label) trying provider=$provider")
                 val session = env.createSession(path, opts)
                 try { opts.close() } catch (_: Exception) {}
+                Log.i(TAG, "createSession($label) success with provider=$provider")
                 return session
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
+                Log.w(TAG, "createSession($label) failed with provider=$provider: ${e::class.java.simpleName}: ${e.message}")
                 lastError = e
                 try { opts.close() } catch (_: Exception) {}
             }
