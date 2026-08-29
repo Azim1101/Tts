@@ -92,9 +92,20 @@ class Synthesizer(
         for ((i, sentence) in sentences.withIndex()) {
             buf.append(sentence)
             val isLast = i == sentences.size - 1
-            val candidate = buf.toString()
-            if (isLast || chunkFrames(candidate, prompt, speed) > prompt.promptLen) {
-                if (candidate.isNotBlank()) chunks.add(candidate)
+            val candidate = buf.toString().trim()
+            if (candidate.isEmpty()) continue
+            if (isLast) {
+                // Last sentence(s): emit, but if the tail is too short relative to
+                // the reference, fold it into the previous chunk instead of leaving
+                // a lone short chunk (which would throw REF_LONGER).
+                if (chunks.isNotEmpty() && chunkFrames(candidate, prompt, speed) <= prompt.promptLen) {
+                    chunks[chunks.size - 1] = chunks[chunks.size - 1] + candidate
+                } else {
+                    chunks.add(candidate)
+                }
+                buf.setLength(0)
+            } else if (chunkFrames(candidate, prompt, speed) > prompt.promptLen) {
+                chunks.add(candidate)
                 buf.setLength(0)
             }
         }
