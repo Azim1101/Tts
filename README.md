@@ -86,6 +86,17 @@ git push origin arena/01a04c12-tts
 The APK is attached to the run as `dhvaani-debug-apk`. No Android Studio or SDK
 install is needed on your machine.
 
+### Publishing a Release (permanent download URL)
+
+Push a version tag and GitHub builds the APK **and** attaches it to a GitHub
+Release with a permanent `releases/latest` URL:
+
+```bash
+git tag v0.5.0 && git push origin v0.5.0
+```
+
+Latest release: <https://github.com/Azim1101/Tts/releases/latest>
+
 ---
 
 ## Using the app
