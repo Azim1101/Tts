@@ -30,14 +30,54 @@ class OnnxEngine(
     private val vocoderBackbone: OrtSession
 
     init {
+        // Each graph is created independently so a failing provider on one model
+        // (e.g. NNAPI not supporting a few ops) never breaks the others. ORT tries
+        // the registered providers in order — GPU/DSP first (NNAPI), then the
+        // vectorised CPU provider (XNNPACK), then a plain CPU session — and falls
+        // back to the next one if createSession throws.
+        encoder = createSessionSafe(encoderPath)
+        fmDecoder = createSessionSafe(fmDecoderPath)
+        vocoderBackbone = createSessionSafe(vocoderBackbonePath)
+    }
+
+    /**
+     * Provider preference per graph. Order matters (first = highest priority).
+     *   - "NNAPI"   -> GPU/DSP on supported devices (fastest, but a few ops may be
+     *                  unsupported -> ORT falls back to CPU for those).
+     *   - "XNNPACK" -> vectorised ARM CPU kernels (safe, reliable, big speedup).
+     *   - "CPU"     -> plain CPU fallback.
+     * To drop NNAPI (e.g. after noticing degraded output on a device), remove the
+     * "NNAPI" entry here.
+     */
+    private val providerPriority = listOf("NNAPI", "XNNPACK", "CPU")
+
+    private fun baseOptions(): OrtSession.SessionOptions {
         val opts = OrtSession.SessionOptions()
         opts.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
         opts.setIntraOpNumThreads(threads)
         opts.setInterOpNumThreads(threads)
+        return opts
+    }
 
-        encoder = env.createSession(encoderPath, opts)
-        fmDecoder = env.createSession(fmDecoderPath, opts)
-        vocoderBackbone = env.createSession(vocoderBackbonePath, opts)
+    private fun createSessionSafe(path: String): OrtSession {
+        var lastError: Exception? = null
+        for (provider in providerPriority) {
+            val opts = baseOptions()
+            try {
+                when (provider) {
+                    "NNAPI" -> opts.addNnapi()
+                    "XNNPACK" -> opts.addXnnpack(emptyMap())
+                    else -> { /* plain CPU */ }
+                }
+                val session = env.createSession(path, opts)
+                try { opts.close() } catch (_: Exception) {}
+                return session
+            } catch (e: Exception) {
+                lastError = e
+                try { opts.close() } catch (_: Exception) {}
+            }
+        }
+        throw IllegalStateException("Could not create ONNX session for $path", lastError)
     }
 
     // ---------------------------------------------------------------------
