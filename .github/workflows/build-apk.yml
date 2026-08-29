@@ -4,9 +4,13 @@ name: Build DhVaani APK
 # ubuntu-latest runner with JDK 17 + Android SDK 34 + Gradle 8.7.
 # The models are downloaded with a retry + size check (the ~125 MB fm_decoder
 # can truncate) and the APK is uploaded as a downloadable artifact.
+#
+# Publishing a Release: push a version tag (e.g. `git tag v0.5 && git push --tags`)
+# -> the APK is attached to a GitHub Release with a permanent `releases/latest` URL.
 on:
   push:
     branches: ["**"]
+    tags: ["v*"]
   pull_request:
   workflow_dispatch:
 
@@ -82,3 +86,37 @@ jobs:
             download.log
             build.log
           if-no-files-found: ignore
+
+  # Publish a GitHub Release (permanent URL) when a v* tag is pushed.
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dhvaani-debug-apk
+          path: release-artifacts
+
+      - name: List downloaded APK
+        run: find release-artifacts -type f -name '*.apk' -exec ls -lh {} \;
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "DhVaani v${{ github.ref_name }}"
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          body: |
+            **DhVaani** — on-device, fully offline Hindi voice cloner (debug APK).
+
+            ## Download
+            - `${{ github.ref_name }}` — [app-debug.apk](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/app-debug.apk) (~170 MB, all ABIs)
+
+            ## Notes
+            - Works fully offline after first launch; models are bundled.
+            - ~170 MB debug build; see the README for the App Bundle / asset-pack publishing route.
+          files: release-artifacts/**/*.apk
