@@ -91,11 +91,23 @@ jobs:
           script: |
             const fs = require('fs');
             let body = `Build run \`${context.runId}\` on \`${context.ref}\` failed at \`${context.job}\`.\n\n`;
-            for (const f of ['download.log', 'build.log']) {
-              if (fs.existsSync(f)) {
-                const txt = fs.readFileSync(f, 'utf8');
-                body += `## ${f}\n\`\`\`\n${txt.slice(-5000)}\n\`\`\`\n\n`;
-              }
+            if (fs.existsSync('build.log')) {
+              const lines = fs.readFileSync('build.log', 'utf8').split('\n');
+              // Kotlin/AGP diagnostics: "e: file.kt:line", "error:", the ^ caret line,
+              // and the "What went wrong" explanation.
+              const diag = lines.filter(l =>
+                /: (error|warning):/.test(l) ||
+                /^e: /.test(l) ||
+                /\^/.test(l) ||
+                /What went wrong|^> |Execution failed|Could not |Caused by:/.test(l)
+              ).join('\n');
+              if (diag) body += '## Diagnostics\n```\n' + diag.slice(-6000) + '\n```\n\n';
+              body += '## build.log (head)\n```\n' + lines.slice(0, 2500).join('\n') + '\n```\n\n';
+              body += '## build.log (tail)\n```\n' + lines.slice(-4500).join('\n') + '\n```\n\n';
+            }
+            if (fs.existsSync('download.log')) {
+              body += '## download.log (tail)\n```\n' +
+                fs.readFileSync('download.log', 'utf8').slice(-2000) + '\n```\n';
             }
             await github.rest.issues.create({
               owner: context.repo.owner,
