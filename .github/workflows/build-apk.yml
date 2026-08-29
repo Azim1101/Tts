@@ -1,0 +1,123 @@
+name: Build DhVaani APK
+
+# Build the debug APK on push / PR / manual trigger using a single
+# ubuntu-latest runner with JDK 17 + Android SDK 34 + Gradle 8.7.
+# The models are downloaded with a retry + size check (the ~125 MB fm_decoder
+# can truncate) and the APK is uploaded as a downloadable artifact.
+#
+# Publishing a Release: push a version tag (e.g. `git tag v0.5 && git push --tags`)
+# -> the APK is attached to a GitHub Release with a permanent `releases/latest` URL.
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: dhvaani-build-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android platform 34 + build-tools 34.0.0
+        run: |
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager --install "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+
+      - name: Write local.properties
+        run: echo "sdk.dir=$ANDROID_HOME" > local.properties
+
+      - name: Install Gradle 8.7 and put on PATH
+        run: |
+          curl -sSL -o /tmp/gradle.zip https://services.gradle.org/distributions/gradle-8.7-bin.zip
+          unzip -q /tmp/gradle.zip -d /opt
+          echo "/opt/gradle-8.7/bin" >> "$GITHUB_PATH"
+          export PATH="/opt/gradle-8.7/bin:$PATH"
+          gradle --version
+
+      - name: Install python deps (numpy, huggingface_hub)
+        run: python3 -m pip install --quiet numpy huggingface_hub
+
+      - name: Download models + build assets
+        continue-on-error: true
+        run: bash scripts/download_models.sh 2>&1 | tee download.log
+
+      - name: Build debug APK
+        run: |
+          set -o pipefail
+          gradle assembleDebug --stacktrace 2>&1 | tee build.log
+          echo "gradle exit=${PIPESTATUS[0]}"
+          echo "--- APK locations ---"
+          find app/build/outputs -type f -name '*.apk' 2>/dev/null || echo "(no apk found)"
+
+      - name: Upload APK as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dhvaani-debug-apk
+          path: app/build/outputs/apk/**/*.apk
+          if-no-files-found: error
+
+      - name: Upload build logs (always, for troubleshooting)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: |
+            download.log
+            build.log
+          if-no-files-found: ignore
+
+  # Publish a GitHub Release (permanent URL) when a v* tag is pushed.
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download APK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dhvaani-debug-apk
+          path: release-artifacts
+
+      - name: List downloaded APK
+        run: find release-artifacts -type f -name '*.apk' -exec ls -lh {} \;
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "DhVaani ${{ github.ref_name }}"
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          body: |
+            **DhVaani** — on-device, fully offline Hindi voice cloner (debug APK).
+
+            ## Download
+            - `${{ github.ref_name }}` — [app-debug.apk](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/app-debug.apk) (~165 MB, arm64-v8a)
+
+            ## Notes
+            - On first launch it **downloads the voice-cloning models itself** (from the ARTPARK-IISc Apache-2.0 model repo), then works fully offline. No developer setup required.
+            - Streams model weights to disk with retry + size check; converts the `.npz` feature files to the app's `.bin` format on-device (no Python/NumPy).
+            - ~165 MB debug build; see the README for the App Bundle / asset-pack publishing route.
+          files: release-artifacts/**/*.apk
