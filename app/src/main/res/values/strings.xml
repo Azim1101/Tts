@@ -11,6 +11,10 @@
     <string name="label_target_text">Target text (to speak)</string>
     <string name="default_target_text">नमस्ते, यह ध्वनि आपकी आवाज़ में बोली गई है।</string>
 
+    <string name="label_steps">Steps</string>
+    <string name="label_guidance">Guidance</string>
+    <string name="label_speed">Speed</string>
+
     <string name="btn_synthesize">✨ Synthesize</string>
     <string name="btn_play_result">▶ Play result</string>
     <string name="btn_stop_result">⏹ Stop</string>

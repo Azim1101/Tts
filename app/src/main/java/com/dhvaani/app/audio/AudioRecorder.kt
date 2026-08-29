@@ -73,8 +73,6 @@ class AudioRecorder(private val sampleRate: Int = 44100) {
         thread = null
         val out = samples.toFloatArray()
         samples.clear()
-        // Trim leading/trailing silence so the cloned voice isn't asked to
-        // model half a second of dead air at either end.
-        return SilenceTrimmer.trim(out, sampleRate)
+        return out
     }
 }
