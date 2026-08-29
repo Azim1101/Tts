@@ -56,10 +56,15 @@ class Synthesizer(
         val prompt = buildPromptInfo(reference, refSampleRate, refTranscript)
 
         // Split into sentences and keep only those that yield tokens.
-        val chunks = splitSentences(targetText).filter {
+        val sentences = splitSentences(targetText).filter {
             tokenizer.toIds(tokenizer.addPunctuation(it)).isNotEmpty()
         }
-        if (chunks.isEmpty()) throw IllegalArgumentException("NO_TOKENS")
+        if (sentences.isEmpty()) throw IllegalArgumentException("NO_TOKENS")
+
+        // Group sentences into synthesis chunks, merging short ones so each
+        // chunk is long enough to exceed the reference length (avoids the
+        // REF_LONGER error when a lone sentence is shorter than the reference).
+        val chunks = planChunks(sentences, prompt, speed)
 
         val totalSteps = steps * chunks.size
         var doneSteps = 0
@@ -73,6 +78,35 @@ class Synthesizer(
             outs.add(audio)
         }
         return concat(outs)
+    }
+
+    /**
+     * Greedily merge consecutive sentences into chunks that each produce enough
+     * frames to exceed the reference prompt length. Uses the cheap text encoder
+     * forward pass to measure the frame count (much cheaper than the full flow
+     * matching loop). The final sentence is always appended to avoid dropping it.
+     */
+    private fun planChunks(sentences: List<String>, prompt: PromptInfo, speed: Float): List<String> {
+        val chunks = ArrayList<String>()
+        val buf = StringBuilder()
+        for ((i, sentence) in sentences.withIndex()) {
+            buf.append(sentence)
+            val isLast = i == sentences.size - 1
+            val candidate = buf.toString()
+            if (isLast || chunkFrames(candidate, prompt, speed) > prompt.promptLen) {
+                if (candidate.isNotBlank()) chunks.add(candidate)
+                buf.setLength(0)
+            }
+        }
+        return chunks
+    }
+
+    /** Runs the (cheap) text encoder to get the frame count for a candidate chunk. */
+    private fun chunkFrames(chunk: String, prompt: PromptInfo, speed: Float): Int {
+        val ids = tokenizer.toIds(tokenizer.addPunctuation(chunk))
+        if (ids.isEmpty()) return 0
+        val textCondition = engine.textEncoder(ids, prompt.promptTokenIds, prompt.promptLen, speed)
+        return textCondition.size / DspConstants.N_MELS
     }
 
     // ---------------------------------------------------------------------
