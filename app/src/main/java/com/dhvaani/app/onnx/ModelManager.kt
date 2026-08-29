@@ -2,6 +2,7 @@ package com.dhvaani.app.onnx
 
 import android.content.Context
 import android.content.res.AssetManager
+import android.util.Log
 import com.dhvaani.app.dsp.DspConstants
 import com.dhvaani.app.tts.Tokenizer
 import java.io.ByteArrayInputStream
@@ -11,190 +12,127 @@ import java.io.FileOutputStream
 /**
  * Resolves and materialises the model assets.
  *
- * Models live either in the bundled APK assets (fast path) or in
- * `filesDir/models/` (downloaded on first launch via [ModelDownloader]). This
- * class copies bundled assets out to `filesDir/models/`, reports what is missing,
- * and loads the small feature files from wherever they exist.
+ * This is the **v0.5.0-style** simple prepare: it copies any model files
+ * that exist in APK `assets/` (or in `filesDir/models/` from a prior run)
+ * and reports the on-disk paths. There is no `setOf`/`filter` chain, no
+ * minBytes thresholds, and no read-side `for (name in setOf(...))` — the
+ * v0.7 `setOf(encoderAsset, fmAsset, …)` getter evaluation in `prepare()`
+ * was the most likely site of the `List.iterator()` NPE the user reported.
  *
- * int8 graphs are preferred, with an automatic fallback to the fp32 variants
- * (`text_encoder.onnx` / `fm_decoder.onnx`) when the int8 files are absent.
+ * The (large) `.onnx` graphs are copied once to `filesDir/models/` so
+ * onnxruntime can memory-map them directly; on subsequent launches the
+ * existing copy is reused.
+ *
+ * int8 graphs are preferred, with an automatic fallback to the fp32
+ * variants (`text_encoder.onnx` / `fm_decoder.onnx`) when the int8 files
+ * are absent.
  */
 class ModelManager(private val context: Context) {
 
     data class Models(
         val ready: Boolean,
         val message: String,
-        val missing: List<String> = emptyList(),
-        val encoderPath: String = "",
-        val fmDecoderPath: String = "",
-        val vocoderBackbonePath: String = ""
+        val encoderPath: String,
+        val fmDecoderPath: String,
+        val vocoderBackbonePath: String
     )
 
     private val assets: AssetManager get() = context.assets
-    val modelsDir: File get() = File(context.filesDir, "models")
 
-    // Minimum sane on-disk size for the ONNX graphs (anything smaller is treated
-    // as truncated/corrupt and re-downloaded). These match the minBytes used by
-    // ModelDownloader and download_models.sh.
-    private val encoderMinBytes = 5_000_000L          // text_encoder_int8.onnx
-    private val fmDecoderMinBytes = 110_000_000L      // fm_decoder_int8.onnx
-    private val vocoderBackboneMinBytes = 30_000_000L // vocoder_backbone.onnx
-
-    // Prefer the int8 graphs; fall back to fp32 if only those are available; if
-    // neither is present we default to int8 (which the downloader fetches).
-    private val encoderAsset: String
-        get() = when {
-            presentAssetsOrDir(DspConstants.ENCODER_INT8, encoderMinBytes) -> DspConstants.ENCODER_INT8
-            presentAssetsOrDir(DspConstants.ENCODER_FP32, encoderMinBytes) -> DspConstants.ENCODER_FP32
-            else -> DspConstants.ENCODER_INT8
-        }
-    private val fmAsset: String
-        get() = when {
-            presentAssetsOrDir(DspConstants.FM_DECODER_INT8, fmDecoderMinBytes) -> DspConstants.FM_DECODER_INT8
-            presentAssetsOrDir(DspConstants.FM_DECODER_FP32, fmDecoderMinBytes) -> DspConstants.FM_DECODER_FP32
-            else -> DspConstants.FM_DECODER_INT8
-        }
-
-    private fun presentAssetsOrDir(name: String, minBytes: Long = 0L): Boolean {
-        val f = File(modelsDir, name)
-        val onDisk = if (minBytes > 0L) f.length() >= minBytes else f.length() > 0L
-        return onDisk || assetExists(name)
-    }
-
-    /** Files the app must have on disk (paths under [modelsDir]) for the pipeline to run. */
-    private fun requiredFiles(): List<String> = listOf(
-        DspConstants.MEL_FB_BIN,
-        DspConstants.VOCOS_HEAD_BIN,
-        DspConstants.TOKENS_TXT,
-        encoderAsset,
-        fmAsset,
-        DspConstants.VOCODER_BACKBONE
-    )
-
-    /** Minimum size for a model file to be considered usable (else treated as missing). */
-    private fun minBytesFor(name: String): Long = when (name) {
-        DspConstants.ENCODER_INT8, DspConstants.ENCODER_FP32 -> encoderMinBytes
-        DspConstants.FM_DECODER_INT8, DspConstants.FM_DECODER_FP32 -> fmDecoderMinBytes
-        DspConstants.VOCODER_BACKBONE -> vocoderBackboneMinBytes
-        else -> 0L
-    }
+    /** `filesDir/models/` — created lazily. */
+    private val modelsDir: File get() = File(context.filesDir, "models")
 
     /**
-     * Ensure the required files are present. Bundled assets are copied to
-     * `filesDir/models/` (so the [OnnxEngine] can memory-map them). Returns
-     * [Models] describing what is present/missing.
+     * Make sure the required files are present and report the on-disk paths.
+     *
+     * Logic (mirrors v0.5.0, which the user confirmed was working):
+     * 1. Pick int8 file names if present, else fall back to fp32 names.
+     * 2. If any of the chosen names is missing from BOTH assets and
+     *    filesDir/models, return ready=false with a useful message.
+     * 3. Otherwise copy from assets to filesDir (idempotent — skips files
+     *    that already exist on disk with non-zero size) and return ready=true
+     *    with the absolute paths.
      */
     fun prepare(): Models {
         if (!modelsDir.exists()) modelsDir.mkdirs()
 
-        // Copy any bundled assets into modelsDir (idempotent). If a previously
-        // downloaded file is below the minBytes threshold (truncated), delete it
-        // so the downloader can fetch a clean copy.
-        for (name in setOf(encoderAsset, fmAsset, DspConstants.VOCODER_BACKBONE,
-                DspConstants.MEL_FB_BIN, DspConstants.VOCOS_HEAD_BIN, DspConstants.TOKENS_TXT)) {
-            val target = File(modelsDir, name)
-            val min = minBytesFor(name)
-            if (min > 0L && target.exists() && target.length() in 1L until min) {
-                target.delete()
-            }
-            if ((target.length() == 0L || (min > 0L && target.length() < min)) && assetExists(name)) {
-                copyAssetTo(name, target)
-            }
-        }
+        val encoderAsset =
+            if (assetExists(DspConstants.ENCODER_INT8)) DspConstants.ENCODER_INT8
+            else DspConstants.ENCODER_FP32
+        val fmAsset =
+            if (assetExists(DspConstants.FM_DECODER_INT8)) DspConstants.FM_DECODER_INT8
+            else DspConstants.FM_DECODER_FP32
+        val vocoderAsset = DspConstants.VOCODER_BACKBONE
 
-        // int8 -> fp32 fallback resolved above; now collect what's still missing.
-        // A file is "missing" if it has 0 bytes, or fewer than its minBytes threshold
-        // (so a 1 KB truncated fm_decoder is treated as absent and re-downloaded).
-        val missing = requiredFiles().filter { name ->
-            val f = File(modelsDir, name)
-            val min = minBytesFor(name)
-            f.length() == 0L || (min > 0L && f.length() < min)
-        }
-        if (missing.isNotEmpty()) {
+        if (!assetExists(vocoderAsset) || !assetExists(encoderAsset) || !assetExists(fmAsset)) {
+            Log.w(TAG, "prepare: at least one model missing from assets (encoder=$encoderAsset fm=$fmAsset vocoder=$vocoderAsset)")
             return Models(
                 ready = false,
-                message = "Model files missing: $missing. Download them or run scripts/download_models.sh.",
-                missing = missing
+                message = "Model assets missing. Run scripts/download_models.sh before building, or use the in-app download.",
+                encoderPath = "", fmDecoderPath = "", vocoderBackbonePath = ""
             )
         }
+
+        val encoderFile = copyToModels(encoderAsset)
+        val fmFile = copyToModels(fmAsset)
+        val backboneFile = copyToModels(vocoderAsset)
+
+        if (encoderFile == null || fmFile == null || backboneFile == null) {
+            Log.e(TAG, "prepare: copyToModels failed (encoder=$encoderFile fm=$fmFile vocoder=$backboneFile)")
+            return Models(false, "Failed to extract model files.", "", "", "")
+        }
+        Log.i(TAG, "prepare: OK encoder=${encoderFile.absolutePath} fm=${fmFile.absolutePath} vocoder=${backboneFile.absolutePath}")
         return Models(
-            ready = true,
-            message = "ok",
-            encoderPath = File(modelsDir, encoderAsset).absolutePath,
-            fmDecoderPath = File(modelsDir, fmAsset).absolutePath,
-            vocoderBackbonePath = File(modelsDir, DspConstants.VOCODER_BACKBONE).absolutePath
+            true, "ok",
+            encoderFile.absolutePath, fmFile.absolutePath, backboneFile.absolutePath
         )
     }
 
-    /**
-     * Download whatever is still needed into [modelsDir] (streaming, with retry +
-     * size check), then regenerate the `.bin` files. Returns true if the app is
-     * ready afterwards.
-     */
-    fun downloadMissingModels(progress: ModelDownloader.Progress): Boolean {
-        val current = prepare()
-        if (current.ready) return true
-
-        // A file is "needed" if it is missing (0 bytes) or smaller than its
-        // minBytes threshold (i.e. truncated). This re-fetches partial files
-        // so a 1 KB fm_decoder doesn't silently slip through into the engine.
-        fun needsDownload(name: String): Boolean {
-            val f = File(modelsDir, name)
-            val min = minBytesFor(name)
-            return f.length() == 0L || (min > 0L && f.length() < min)
-        }
-        val needed = ArrayList<String>()
-        if (needsDownload(encoderAsset)) needed.add(encoderAsset)
-        if (needsDownload(fmAsset)) needed.add(fmAsset)
-        if (needsDownload(DspConstants.VOCODER_BACKBONE)) needed.add(DspConstants.VOCODER_BACKBONE)
-        if (needsDownload(DspConstants.MEL_FB_BIN)) needed.add("mel_fb.npz")
-        if (needsDownload(DspConstants.VOCOS_HEAD_BIN)) needed.add("vocos_head.npz")
-        if (needsDownload(DspConstants.TOKENS_TXT)) needed.add(DspConstants.TOKENS_TXT)
-
-        if (needed.isEmpty()) return prepare().ready
-
-        val ok = ModelDownloader.downloadMissing(modelsDir, needed, progress)
-        return ok && prepare().ready
-    }
-
-    private fun copyAssetTo(name: String, target: File) {
-        try {
-            assets.open(name).use { input ->
+    /** Copy a single asset to `filesDir/models/` if it's not already there. */
+    private fun copyToModels(assetName: String): File? {
+        val target = File(modelsDir, assetName)
+        if (target.length() > 0L) return target  // already extracted
+        return try {
+            assets.open(assetName).use { input ->
                 FileOutputStream(target).use { out -> input.copyTo(out) }
             }
+            target
         } catch (e: Exception) {
-            // ignored; prepare() reports missing
+            Log.e(TAG, "copyToModels: failed for $assetName", e)
+            null
         }
     }
 
     private fun assetExists(name: String): Boolean {
         return try {
-            assets.list("")?.any { it == name } == true
+            // AssetManager.list(path) returns the names in the given asset
+            // directory; on the root we pass "". The result is nullable on
+            // some Android versions, hence the safe-call.
+            val list: Array<String>? = assets.list("")
+            list?.any { it == name } == true
         } catch (e: Exception) {
             false
         }
     }
 
-    private fun readSource(name: String): ByteArray {
-        val f = File(modelsDir, name)
-        if (f.length() > 0) return f.readBytes()
-        return assets.open(name).use { it.readBytes() }
-    }
-
     fun readAsset(name: String): ByteArray = assets.open(name).use { it.readBytes() }
 
     fun loadMelFb(): MelFilterbank {
-        val bytes = readSource(DspConstants.MEL_FB_BIN)
+        val bytes = readAsset(DspConstants.MEL_FB_BIN)
         return MelFilterbank.fromBytes(ByteArrayInputStream(bytes))
     }
 
     fun loadVocosHead(): VocosHead {
-        val bytes = readSource(DspConstants.VOCOS_HEAD_BIN)
+        val bytes = readAsset(DspConstants.VOCOS_HEAD_BIN)
         return VocosHead.fromBytes(ByteArrayInputStream(bytes))
     }
 
     fun loadTokenizer(): Tokenizer {
-        val text = readSource(DspConstants.TOKENS_TXT).toString(Charsets.UTF_8)
+        val text = readAsset(DspConstants.TOKENS_TXT).toString(Charsets.UTF_8)
         return Tokenizer.fromFileContent(text)
+    }
+
+    private companion object {
+        private const val TAG = "DhVaani.Model"
     }
 }

@@ -294,31 +294,13 @@ class MainActivity : AppCompatActivity() {
                 downloadModels()
                 return
             }
-            Log.i("DhVaani", "loadModels: files present, creating engine")
-            val eng = try {
-                OnnxEngine(models.encoderPath, models.fmDecoderPath, models.vocoderBackbonePath)
-            } catch (e: Throwable) {
-                Log.e("DhVaani", "OnnxEngine ctor failed", e)
-                throw e
-            }
-            val tokenizer = try { mgr.loadTokenizer() } catch (e: Throwable) {
-                Log.e("DhVaani", "loadTokenizer failed", e); throw e
-            }
-            val melFb = try { mgr.loadMelFb() } catch (e: Throwable) {
-                Log.e("DhVaani", "loadMelFb failed", e); throw e
-            }
-            val vocosHead = try { mgr.loadVocosHead() } catch (e: Throwable) {
-                Log.e("DhVaani", "loadVocosHead failed", e); throw e
-            }
-            val frontend = try { VocosFrontend(melFb.fb, melFb.window, melFb.nFft, melFb.hop, melFb.nMels) } catch (e: Throwable) {
-                Log.e("DhVaani", "VocosFrontend ctor failed", e); throw e
-            }
-            val vocoder = try { VocosVocoder(eng, vocosHead) } catch (e: Throwable) {
-                Log.e("DhVaani", "VocosVocoder ctor failed", e); throw e
-            }
-            val syn = try { Synthesizer(eng, tokenizer, frontend, vocoder) } catch (e: Throwable) {
-                Log.e("DhVaani", "Synthesizer ctor failed", e); throw e
-            }
+            val eng = OnnxEngine(models.encoderPath, models.fmDecoderPath, models.vocoderBackbonePath)
+            val tokenizer = mgr.loadTokenizer()
+            val melFb = mgr.loadMelFb()
+            val vocosHead = mgr.loadVocosHead()
+            val frontend = VocosFrontend(melFb.fb, melFb.window, melFb.nFft, melFb.hop, melFb.nMels)
+            val vocoder = VocosVocoder(eng, vocosHead)
+            val syn = Synthesizer(eng, tokenizer, frontend, vocoder)
             runOnUiThread {
                 engine = eng
                 synthesizer = syn
@@ -353,12 +335,32 @@ class MainActivity : AppCompatActivity() {
         }
 
         executor.execute {
-            val ok = mgr.downloadMissingModels { idx, count, name, frac ->
-                val line = getString(R.string.status_downloading, idx, count, name, (frac * 100).toInt())
-                runOnUiThread {
-                    status(line)
-                    binding.progress.progress = (frac * 100).toInt()
+            // The v0.5.0-style download path: we don't touch the possibly-null
+            // getters in ModelManager. We ask the downloader for the canonical
+            // list of files it knows about and let it handle ordering.
+            val needed = listOf(
+                com.dhvaani.app.dsp.DspConstants.ENCODER_INT8,
+                com.dhvaani.app.dsp.DspConstants.FM_DECODER_INT8,
+                com.dhvaani.app.dsp.DspConstants.VOCODER_BACKBONE,
+                "mel_fb.npz",
+                "vocos_head.npz",
+                com.dhvaani.app.dsp.DspConstants.TOKENS_TXT
+            )
+            val modelsDir = java.io.File(filesDir, "models")
+            if (!modelsDir.exists()) modelsDir.mkdirs()
+            val ok = try {
+                com.dhvaani.app.onnx.ModelDownloader.downloadMissing(
+                    modelsDir, needed
+                ) { idx, count, name, frac ->
+                    val line = getString(R.string.status_downloading, idx, count, name, (frac * 100).toInt())
+                    runOnUiThread {
+                        status(line)
+                        binding.progress.progress = (frac * 100).toInt()
+                    }
                 }
+            } catch (e: Throwable) {
+                Log.e("DhVaani.Download", "downloadMissing threw", e)
+                false
             }
             runOnUiThread {
                 binding.progress.visibility = View.GONE
