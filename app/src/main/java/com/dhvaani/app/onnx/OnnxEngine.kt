@@ -42,14 +42,16 @@ class OnnxEngine(
 
     /**
      * Provider preference per graph. Order matters (first = highest priority).
-     *   - "NNAPI"   -> GPU/DSP on supported devices (fastest, but a few ops may be
-     *                  unsupported -> ORT falls back to CPU for those).
-     *   - "XNNPACK" -> vectorised ARM CPU kernels (safe, reliable, big speedup).
+     *   - "XNNPACK" -> vectorised ARM CPU kernels (safe, reliable, big, predictable
+     *                  speedup; all ops supported so quality is unchanged).
+     *   - "NNAPI"   -> GPU/DSP on supported devices (can be faster, but a few ops may
+     *                  be unsupported -> ORT falls back to CPU for those, and on some
+     *                  devices results can differ). Kept as a secondary preference.
      *   - "CPU"     -> plain CPU fallback.
-     * To drop NNAPI (e.g. after noticing degraded output on a device), remove the
-     * "NNAPI" entry here.
+     * To force NNAPI first (test on your device) move "NNAPI" to the front; to
+     * disable it entirely, remove the "NNAPI" entry.
      */
-    private val providerPriority = listOf("NNAPI", "XNNPACK", "CPU")
+    private val providerPriority = listOf("XNNPACK", "NNAPI", "CPU")
 
     private fun baseOptions(): OrtSession.SessionOptions {
         val opts = OrtSession.SessionOptions()
