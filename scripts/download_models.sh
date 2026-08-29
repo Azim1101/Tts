@@ -51,8 +51,11 @@ download "tokens.txt"         1_000
 # --- convert npz -> bin --------------------------------------------------------
 echo "==> Converting .npz feature files to .bin"
 if ! python3 -c "import numpy" 2>/dev/null; then
-  echo "numpy is required. Install:  python3 -m pip install numpy" >&2
-  exit 1
+  echo "numpy missing; attempting install ..."
+  if ! python3 -m pip install --quiet numpy 2>/dev/null; then
+    echo "numpy is required. Install:  python3 -m pip install numpy" >&2
+    exit 1
+  fi
 fi
 python3 scripts/make_assets.py --in "$ASSETS" --out "$ASSETS"
 

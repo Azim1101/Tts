@@ -22,7 +22,7 @@ vocoder. **Apache-2.0.**
 | `app/src/main/java/com/dhvaani/app/audio/` | AudioRecord recorder, MediaCodec importer, AudioTrack player, WAV/MediaStore saver |
 | `scripts/download_models.sh` | Fetch ONNX graphs + features, convert `.npz` → `.bin` |
 | `scripts/make_assets.py` | Numpy → little-endian `.bin` converter |
-| `scripts/build_colab.ipynb` | Self-contained Colab build (JDK 17 + SDK 34 + Gradle 8.7) |
+| `.github/workflows/build-apk.yml` | GitHub Actions CI: build the debug APK and upload it as an artifact |
 
 ## Model assets (downloaded, not committed)
 
@@ -70,15 +70,21 @@ gradle assembleDebug
 # APK at app/build/outputs/apk/debug/app-debug.apk
 ```
 
-### Option B — Google Colab (self-contained)
+### Option B — GitHub Actions (CI, no local Android SDK needed)
 
-Open [`scripts/build_colab.ipynb`](scripts/build_colab.ipynb) in Colab and run
-all cells. It installs JDK 17, Android SDK 34, Gradle 8.7, downloads the models
-(**with retry + min-byte-size check** — the 125 MB `fm_decoder` can truncate),
-converts the features, and runs `assembleDebug`.
+Push to a branch (or run the workflow manually) and GitHub builds the APK on an
+`ubuntu-latest` runner with JDK 17, Android SDK 34, Gradle 8.7 — it downloads the
+models (with retry + min-byte-size check, since the 125 MB `fm_decoder` can
+truncate), converts the features, runs `assembleDebug`, and uploads
+`app-debug.apk` as a downloadable **artifact**.
 
-> **Critical:** `JAVA_HOME` must be set to Java 17 and **exported to the Gradle
-> subprocess**. AGP 8.5 requires Java 17; Colab defaults to Java 11, which fails.
+```bash
+# push the branch; open Actions -> "Build DhVaani APK" -> Run workflow
+git push origin arena/01a04c12-tts
+```
+
+The APK is attached to the run as `dhvaani-debug-apk`. No Android Studio or SDK
+install is needed on your machine.
 
 ---
 

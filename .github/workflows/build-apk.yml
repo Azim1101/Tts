@@ -1,0 +1,65 @@
+name: Build DhVaani APK
+
+# Build the debug APK on push / PR / manual trigger using a single
+# ubuntu-latest runner with JDK 17 + Android SDK 34 + Gradle 8.7.
+# The models are downloaded with a retry + size check (the ~125 MB fm_decoder
+# can truncate) and the APK is uploaded as a downloadable artifact.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: dhvaani-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android platform 34 + build-tools 34.0.0
+        run: |
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager --install "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+
+      - name: Write local.properties
+        run: echo "sdk.dir=$ANDROID_HOME" > local.properties
+
+      - name: Install Gradle 8.7 and put on PATH
+        run: |
+          curl -sSL -o /tmp/gradle.zip https://services.gradle.org/distributions/gradle-8.7-bin.zip
+          unzip -q /tmp/gradle.zip -d /opt
+          echo "/opt/gradle-8.7/bin" >> "$GITHUB_PATH"
+          export PATH="/opt/gradle-8.7/bin:$PATH"
+          gradle --version
+
+      - name: Install numpy (asset conversion)
+        run: python3 -m pip install --quiet numpy
+
+      - name: Download models + build assets
+        run: bash scripts/download_models.sh
+
+      - name: Build debug APK
+        run: gradle assembleDebug --stacktrace
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: dhvaani-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
