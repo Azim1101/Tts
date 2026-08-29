@@ -13,10 +13,12 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "0.5"
-        // Models run on CPU (small int8 graphs). Shipping all three ABIs lets the
-        // APK install on arm64 and armeabi-v7a phones plus emulator x86_64.
+        // Only ship the 64-bit ARM ABI that real phones run. This drops the stale
+        // x86_64/armeabi-v7a native libs, shrinking the APK and ensuring the
+        // optimised arm64 XNNPACK/NNAPI .so is the one used.
+        // For emulator testing add "x86_64" back on a debug-only variant.
         ndk {
-            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64")
+            abiFilters += listOf("arm64-v8a")
         }
     }
 
