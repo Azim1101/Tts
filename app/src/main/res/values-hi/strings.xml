@@ -12,10 +12,6 @@
     <string name="label_target_text">लक्ष्य पाठ (जो बोलना है)</string>
     <string name="default_target_text">नमस्ते, यह ध्वनि आपकी आवाज़ में बोली गई है।</string>
 
-    <string name="label_steps">चरण</string>
-    <string name="label_guidance">मार्गदर्शन</string>
-    <string name="label_speed">गति</string>
-
     <string name="btn_synthesize">✨ संश्लेषण</string>
     <string name="btn_play_result">▶ परिणाम सुनें</string>
     <string name="btn_stop_result">⏹ बंद</string>
