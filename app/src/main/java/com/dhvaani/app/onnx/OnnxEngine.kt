@@ -3,6 +3,7 @@ package com.dhvaani.app.onnx
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
+import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.FloatBuffer
 import java.nio.LongBuffer
@@ -119,8 +120,7 @@ class OnnxEngine(
     fun vocoderBackbone(mels: FloatArray): FloatArray {
         val frames = mels.size / 100
         val shape = longArrayOf(1L, 100L, frames.toLong())
-        val buffer = FloatBuffer.wrap(mels).order(ByteOrder.nativeOrder())
-        val tensor = OnnxTensor.createTensor(env, buffer, shape)
+        val tensor = OnnxTensor.createTensor(env, directFloat(mels), shape)
         try {
             val result = vocoderBackbone.run(mapOf("mels" to tensor))
             val output = result.get(0) as OnnxTensor
@@ -144,28 +144,41 @@ class OnnxEngine(
     // helpers
     // ---------------------------------------------------------------------
     private fun floatScalar(value: Float): Pair<LongArray, OnnxTensor> {
-        val buf = FloatBuffer.allocate(1).order(ByteOrder.nativeOrder())
-        buf.put(value)
-        buf.rewind()
-        return longArrayOf() to OnnxTensor.createTensor(env, buf, longArrayOf())
+        return longArrayOf() to OnnxTensor.createTensor(env, directFloat(floatArrayOf(value)), longArrayOf())
     }
 
     private fun longScalar(value: Long): Pair<LongArray, OnnxTensor> {
-        val buf = LongBuffer.allocate(1).order(ByteOrder.nativeOrder())
-        buf.put(value)
-        buf.rewind()
-        return longArrayOf() to OnnxTensor.createTensor(env, buf, longArrayOf())
+        return longArrayOf() to OnnxTensor.createTensor(env, directLong(longArrayOf(value)), longArrayOf())
     }
 
     private fun floatTensor3D(data: FloatArray, length: Int): Pair<LongArray, OnnxTensor> {
         val shape = longArrayOf(1L, length.toLong(), 100L)
-        val buf = FloatBuffer.wrap(data).order(ByteOrder.nativeOrder())
-        return shape to OnnxTensor.createTensor(env, buf, shape)
+        return shape to OnnxTensor.createTensor(env, directFloat(data), shape)
     }
 
     private fun longTensor1D(data: LongArray): Pair<LongArray, OnnxTensor> {
         val shape = longArrayOf(1L, data.size.toLong())
-        val buf = LongBuffer.wrap(data).order(ByteOrder.nativeOrder())
-        return shape to OnnxTensor.createTensor(env, buf, shape)
+        return shape to OnnxTensor.createTensor(env, directLong(data), shape)
+    }
+
+    /**
+     * Wrap a FloatArray into a native-order direct [FloatBuffer]. We build it from
+     * a direct [ByteBuffer] so ORT can read it directly and we never depend on the
+     * (platform-dependent) return type of `FloatBuffer.order(ByteOrder)`.
+     */
+    private fun directFloat(data: FloatArray): FloatBuffer {
+        val bb = ByteBuffer.allocateDirect(data.size * 4).order(ByteOrder.nativeOrder())
+        val fb = bb.asFloatBuffer()
+        fb.put(data)
+        fb.rewind()
+        return fb
+    }
+
+    private fun directLong(data: LongArray): LongBuffer {
+        val bb = ByteBuffer.allocateDirect(data.size * 8).order(ByteOrder.nativeOrder())
+        val lb = bb.asLongBuffer()
+        lb.put(data)
+        lb.rewind()
+        return lb
     }
 }

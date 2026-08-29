@@ -56,13 +56,18 @@ jobs:
         run: bash scripts/download_models.sh 2>&1 | tee download.log
 
       - name: Build debug APK
-        run: gradle assembleDebug --stacktrace 2>&1 | tee build.log
+        run: |
+          set -o pipefail
+          gradle assembleDebug --stacktrace 2>&1 | tee build.log
+          echo "gradle exit=${PIPESTATUS[0]}"
+          echo "--- APK locations ---"
+          find app/build/outputs -type f -name '*.apk' 2>/dev/null || echo "(no apk found)"
 
       - name: Upload APK as artifact
         uses: actions/upload-artifact@v4
         with:
           name: dhvaani-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: app/build/outputs/apk/**/*.apk
           if-no-files-found: error
 
       - name: Upload build logs (always, for troubleshooting)

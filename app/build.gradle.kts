@@ -51,12 +51,6 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
-
-    // Keep the big .onnx files out of AAPT compression so they can be memory-mapped
-    // directly by ORT instead of being read+deflated through Assets.
-    androidResources {
-        noCompress += "onnx"
-    }
 }
 
 dependencies {
