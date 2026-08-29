@@ -92,7 +92,7 @@ Push a version tag and GitHub builds the APK **and** attaches it to a GitHub
 Release with a permanent `releases/latest` URL:
 
 ```bash
-git tag v0.5.0 && git push origin v0.5.0
+git tag v0.7.0 && git push origin v0.7.0
 ```
 
 Latest release: <https://github.com/Azim1101/Tts/releases/latest>
@@ -109,7 +109,11 @@ Latest release: <https://github.com/Azim1101/Tts/releases/latest>
 5. Tap **✨ Synthesize** — progress shows `step x/N` with RTF + time.
 6. **▶ Play result**, then **💾 Save** to MediaStore under `Music/DhVaani`.
 
-The app works fully offline after the first model load.
+On **first launch** the app downloads the model graphs + feature files itself
+(from the Apache-2.0 ARTPARK-IISc model repo) into its private storage, converting
+the `.npz` features to `.bin` on-device — no developer setup, no Python/NumPy. A
+**Download models** button and a progress bar report the status. After that it
+works fully offline.
 
 ---
 
@@ -126,10 +130,12 @@ The app works fully offline after the first model load.
 
 ## ⚠️ Honest limitations (please read before publishing)
 
-1. **APK ≈ 165 MB** (int8 models ~180 MB, arm64-only). It's beyond Play's single
-   file limit, so for publishing use an **App Bundle + asset packs** or a
-   **models-on-first-launch** download. The debug APK is arm64-v8a only (no x86_64
-   emulator support); add `x86_64` back for emulator testing.
+1. **APK ≈ 165 MB** (arm64-v8a only; includes the int8 models when built by the
+   CI script). It's beyond Play's single file limit, so for publishing use an
+   **App Bundle + asset packs**; the debug APK is arm64-v8a only (no x86_64
+   emulator support, add `x86_64` back for emulator testing). If the models are
+   bundled (CI builds) the app loads them straight away; from v0.7, if they're
+   ever missing it **downloads them on first launch** instead of failing.
 2. **Only Devanagari / Indic script renders well.** No Latin "Hinglish", digits,
    abbreviations or foreign words (chars not in the vocab are dropped). No
    language auto-detect or number normalisation.
