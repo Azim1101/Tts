@@ -126,21 +126,26 @@ The app works fully offline after the first model load.
 
 ## ⚠️ Honest limitations (please read before publishing)
 
-1. **APK ≈ 250 MB+** (int8 models ~180 MB) — beyond Play's 200 MB/file limit.
-   For publishing use an **App Bundle + asset packs** or a **models-on-first-launch**
-   download.
+1. **APK ≈ 165 MB** (int8 models ~180 MB, arm64-only). It's beyond Play's single
+   file limit, so for publishing use an **App Bundle + asset packs** or a
+   **models-on-first-launch** download. The debug APK is arm64-v8a only (no x86_64
+   emulator support); add `x86_64` back for emulator testing.
 2. **Only Devanagari / Indic script renders well.** No Latin "Hinglish", digits,
    abbreviations or foreign words (chars not in the vocab are dropped). No
    language auto-detect or number normalisation.
 3. **Character-level, script-dependent tokenizer** (1058 chars).
-4. **Speed:** CPU only, ~5–15× realtime. Use 8 steps + short text for quick results.
-   On 2 desktop CPU cores RTF ≈ 2.7; on a mid-range phone expect 5–15× slower than
-   real-time. It will feel slow.
+4. **Speed:** CPU + (where supported) NNAPI/XNNPACK execution providers. Default
+   flow-matching is 8 steps; XNNPACK vectorised ARM kernels give a solid speedup and
+   NNAPI offloads to GPU/DSP when supported (per-graph CPU fallback if not). Long text
+   is auto-split into sentence chunks. On a mid-range phone expect roughly 5–15×
+   real-time still — it will feel slow, but noticeably faster than the previous
+   20-step baseline.
 5. **Clone quality depends on the reference:** best with clean, single-speaker,
    3–8 s audio. Noisy/quiet/reverb degrades. Quiet references get RMS-boosted
    (which also amplifies background noise).
 6. **24 kHz, 100-mel, Vocos.** Clean but not studio-grade. No emotion / SSML / pause control.
-7. **Long text → memory grows.** Split into sentences.
+7. **Long text → memory grows.** The app now auto-splits into sentence chunks and
+   synthesises each separately, then concatenates — bounding peak memory.
 8. **License respect:** Apache-2.0 source; also respect the training corpora
    (IndicTTS, Rasa, IISc SYSPIN).
 
