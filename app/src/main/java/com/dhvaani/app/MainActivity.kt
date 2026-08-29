@@ -190,7 +190,17 @@ class MainActivity : AppCompatActivity() {
         val guidance = binding.sliderGuidance.value
         val speed = binding.sliderSpeed.value
         val syn = synthesizer
-        if (syn == null) { toast(getString(R.string.err_models_missing)); return }
+        if (syn == null) {
+            // Defensive: the button should be disabled while models are missing,
+            // but if we somehow got here, disable it now and tell the user how
+            // to recover — instead of leaving a misleading persistent toast.
+            binding.btnSynthesize.isEnabled = false
+            binding.btnDownloadModels.visibility = View.VISIBLE
+            binding.btnDownloadModels.isEnabled = true
+            status(getString(R.string.err_models_missing))
+            toast(getString(R.string.err_models_missing))
+            return
+        }
 
         busy = true
         binding.btnSynthesize.isEnabled = false
@@ -244,8 +254,12 @@ class MainActivity : AppCompatActivity() {
 
     private fun fail(msg: String) {
         busy = false
-        binding.btnSynthesize.isEnabled = true
         binding.progress.visibility = View.GONE
+        // Only re-enable Synthesize when the synthesizer is actually ready. If
+        // it's still null (e.g. models failed to load earlier), the user MUST
+        // not be able to tap the button just to see another "Model files
+        // missing" toast — they should re-tap "Download models" instead.
+        binding.btnSynthesize.isEnabled = synthesizer != null
         status(msg)
         toast(msg)
     }
@@ -294,7 +308,15 @@ class MainActivity : AppCompatActivity() {
                 binding.btnSynthesize.isEnabled = true
             }
         } catch (e: Exception) {
-            runOnUiThread { fail(getString(R.string.err_runtime, e.message ?: "load")) }
+            // Any exception during model load means the synthesizer is in an
+            // inconsistent state. Show the error, KEEP Synthesize disabled, and
+            // bring the "Download models" button back so the user can recover.
+            runOnUiThread {
+                binding.btnSynthesize.isEnabled = false
+                binding.btnDownloadModels.visibility = View.VISIBLE
+                binding.btnDownloadModels.isEnabled = true
+                fail(getString(R.string.err_runtime, e.message ?: "load"))
+            }
         }
     }
 
@@ -335,7 +357,15 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ------------------------------------------------------------------
-    private fun status(s: String) { binding.statusLine.text = s }
+    private fun status(s: String) {
+        binding.statusLine.text = s
+        // When the status line gets a new authoritative message (e.g. "Ready."),
+        // dismiss any pending Toast so the user doesn't see a stale banner
+        // (e.g. an earlier "Model files missing…") coexisting with the new
+        // status. Toast is transient; statusLine is the source of truth.
+        currentToast?.cancel()
+        currentToast = null
+    }
 
     private fun toast(s: String) {
         // Cancel any previous toast so a later "ready" / status update doesn't
