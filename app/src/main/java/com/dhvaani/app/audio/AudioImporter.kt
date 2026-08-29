@@ -80,7 +80,12 @@ class AudioImporter(private val context: Context) {
             }
 
             if (decoded.isEmpty()) throw IllegalStateException("Decoded no audio samples")
-            return ImportedAudio(decoded.toFloatArray(), sampleRate)
+            val raw = decoded.toFloatArray()
+            // Trim leading/trailing silence so the reference voice only
+            // contains actual speech — improves clone quality significantly
+            // for recordings that start/end with a beat of dead air.
+            val trimmed = SilenceTrimmer.trim(raw, sampleRate)
+            return ImportedAudio(trimmed, sampleRate)
         } finally {
             try { codec?.stop() } catch (_: Exception) {}
             try { codec?.release() } catch (_: Exception) {}
