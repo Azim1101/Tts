@@ -49,7 +49,7 @@ class ModelManager(private val context: Context) {
         }
 
     private fun presentAssetsOrDir(name: String): Boolean {
-        return assetExists(name) || File(modelsDir, name).length() > 0
+        return assetExists(name) || File(modelsDir, name).length() > 0L
     }
 
     /** Files the app must have on disk (paths under [modelsDir]) for the pipeline to run. */
@@ -74,7 +74,7 @@ class ModelManager(private val context: Context) {
         for (name in setOf(encoderAsset, fmAsset, DspConstants.VOCODER_BACKBONE,
                 DspConstants.MEL_FB_BIN, DspConstants.VOCOS_HEAD_BIN, DspConstants.TOKENS_TXT)) {
             val target = File(modelsDir, name)
-            if (target.length() == 0 && assetExists(name)) {
+            if (target.length() == 0L && assetExists(name)) {
                 copyAssetTo(name, target)
             }
         }
