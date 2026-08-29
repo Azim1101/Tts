@@ -28,6 +28,11 @@
     <string name="status_done">पूर्ण: %1$s (RTF %2$s)</string>
     <string name="status_saved">Music/DhVaani में सहेजा गया</string>
 
+    <string name="btn_download_models">📥 मॉडल डाउनलोड करें (पहली बार)</string>
+    <string name="status_downloading">मॉडल डाउनलोड हो रहे हैं… %1$d/%2$d (%3$s) %4$d%%</string>
+    <string name="status_download_failed">मॉडल डाउनलोड विफल। इंटरनेट जाँचें और "मॉडल डाउनलोड करें" दबाएँ।</string>
+    <string name="status_download_done">मॉडल तैयार हैं।</string>
+
     <string name="err_empty_ref">पहले संदर्भ आवाज़ रिकॉर्ड या आयात करें।</string>
     <string name="err_empty_transcript">संदर्भ पाठ खाली है।</string>
     <string name="err_empty_target">लक्ष्य पाठ खाली है।</string>

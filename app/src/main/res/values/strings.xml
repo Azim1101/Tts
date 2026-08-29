@@ -27,6 +27,11 @@
     <string name="status_done">Done in %1$s (RTF %2$s)</string>
     <string name="status_saved">Saved to Music/DhVaani</string>
 
+    <string name="btn_download_models">📥 Download models (first launch)</string>
+    <string name="status_downloading">Downloading models… %1$d/%2$d (%3$s) %4$d%%</string>
+    <string name="status_download_failed">Model download failed. Check internet and tap "Download models".</string>
+    <string name="status_download_done">Models ready.</string>
+
     <string name="err_empty_ref">No reference audio. Record or import one first.</string>
     <string name="err_empty_transcript">Reference transcript is empty.</string>
     <string name="err_empty_target">Target text is empty.</string>

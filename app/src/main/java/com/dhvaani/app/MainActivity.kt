@@ -36,9 +36,11 @@ class MainActivity : AppCompatActivity() {
     private var refSampleRate: Int = 44100
     private var result: FloatArray? = null
     private var busy = false
+    @Volatile private var downloading = false
 
     private var engine: OnnxEngine? = null
     private var synthesizer: Synthesizer? = null
+    private var modelManager: ModelManager? = null
 
     private val recordPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -102,6 +104,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.btnSynthesize.setOnClickListener { synthesize() }
+
+        binding.btnDownloadModels.setOnClickListener { downloadModels() }
 
         binding.btnPlayResult.setOnClickListener {
             val r = result
@@ -253,14 +257,21 @@ class MainActivity : AppCompatActivity() {
     }
 
     // ------------------------------------------------------------------
-    // Model loading
+    // Model loading / download
     // ------------------------------------------------------------------
     private fun loadModels() {
         try {
             val mgr = ModelManager(this)
+            modelManager = mgr
             val models = mgr.prepare()
             if (!models.ready) {
-                runOnUiThread { fail(models.message) }
+                runOnUiThread {
+                    status(models.message)
+                    binding.btnDownloadModels.visibility = View.VISIBLE
+                    binding.btnSynthesize.isEnabled = false
+                }
+                // Auto-start the download so the user usually doesn't need to tap.
+                downloadModels()
                 return
             }
             val eng = OnnxEngine(models.encoderPath, models.fmDecoderPath, models.vocoderBackbonePath)
@@ -274,10 +285,47 @@ class MainActivity : AppCompatActivity() {
                 engine = eng
                 synthesizer = syn
                 status(getString(R.string.status_ready))
+                binding.btnDownloadModels.visibility = View.GONE
                 binding.btnSynthesize.isEnabled = true
             }
         } catch (e: Exception) {
             runOnUiThread { fail(getString(R.string.err_runtime, e.message ?: "load")) }
+        }
+    }
+
+    private fun downloadModels() {
+        val mgr = modelManager ?: return
+        if (downloading) return
+        downloading = true
+        // UI setup on the main thread (this can be called from the bg executor).
+        runOnUiThread {
+            binding.btnDownloadModels.isEnabled = false
+            binding.progress.visibility = View.VISIBLE
+            binding.progress.max = 100
+            status(getString(R.string.status_downloading, 0, 1, "", 0))
+        }
+
+        executor.execute {
+            val ok = mgr.downloadMissingModels { idx, count, name, frac ->
+                val line = getString(R.string.status_downloading, idx, count, name, (frac * 100).toInt())
+                runOnUiThread {
+                    status(line)
+                    binding.progress.progress = (frac * 100).toInt()
+                }
+            }
+            runOnUiThread {
+                binding.progress.visibility = View.GONE
+                downloading = false
+                if (ok) {
+                    binding.btnDownloadModels.visibility = View.GONE
+                    status(getString(R.string.status_download_done))
+                    // Re-attempt full model load (now ready).
+                    loadModels()
+                } else {
+                    binding.btnDownloadModels.isEnabled = true
+                    status(getString(R.string.status_download_failed))
+                }
+            }
         }
     }
 

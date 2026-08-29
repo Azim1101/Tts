@@ -194,6 +194,16 @@
                 android:enabled="false" />
         </LinearLayout>
 
+        <!-- Download models (shown only when the models are not bundled/available) -->
+        <Button
+            android:id="@+id/btnDownloadModels"
+            style="@style/Widget.Material3.Button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:visibility="gone"
+            android:text="@string/btn_download_models" />
+
         <!-- Status -->
         <com.google.android.material.progressindicator.LinearProgressIndicator
             android:id="@+id/progress"
