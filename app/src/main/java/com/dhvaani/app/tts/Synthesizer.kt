@@ -12,8 +12,6 @@ import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
 
-// RmsNormalizer.scale is used below for undoing an RMS boost.
-
 /**
  * Zero-shot voice cloning pipeline, all on device.
  *
@@ -24,6 +22,10 @@ import kotlin.math.sqrt
  *   speech_condition = [prompt_features; zeros]
  *   Euler flow-matching (t_shift 0.5) using fm_decoder
  *   drop prompt frames -> unscale -> Vocos vocoder -> PCM
+ *
+ * Long target text is split into sentence chunks, each synthesised separately
+ * and concatenated. This keeps the per-call tensor size (and therefore memory
+ * and latency) bounded, while the reference conditioning stays constant.
  */
 class Synthesizer(
     private val engine: OnnxEngine,
@@ -31,6 +33,14 @@ class Synthesizer(
     private val frontend: VocosFrontend,
     private val vocoder: VocosVocoder
 ) {
+
+    /** Reference-derived conditioning, computed once and reused per sentence. */
+    private data class PromptInfo(
+        val promptFeatures: FloatArray,
+        val promptTokenIds: LongArray,
+        val promptLen: Int,
+        val rmsResult: RmsResult
+    )
 
     fun synthesize(
         reference: FloatArray,
@@ -43,25 +53,68 @@ class Synthesizer(
         onProgress: (done: Int, total: Int) -> Unit
     ): FloatArray {
 
-        // 1) Reference preprocessing: resample to 24 kHz + RMS normalise.
+        val prompt = buildPromptInfo(reference, refSampleRate, refTranscript)
+
+        // Split into sentences and keep only those that yield tokens.
+        val chunks = splitSentences(targetText).filter {
+            tokenizer.toIds(tokenizer.addPunctuation(it)).isNotEmpty()
+        }
+        if (chunks.isEmpty()) throw IllegalArgumentException("NO_TOKENS")
+
+        val totalSteps = steps * chunks.size
+        var doneSteps = 0
+        val outs = ArrayList<FloatArray>(chunks.size)
+
+        for (chunk in chunks) {
+            val audio = synthesizeChunk(chunk, prompt, steps, guidance, speed) { done, total ->
+                onProgress(doneSteps + done, totalSteps)
+            }
+            doneSteps += steps
+            outs.add(audio)
+        }
+        return concat(outs)
+    }
+
+    // ---------------------------------------------------------------------
+    // Reference preprocessing (steps 1-2), computed once.
+    // ---------------------------------------------------------------------
+    private fun buildPromptInfo(reference: FloatArray, refSampleRate: Int, refTranscript: String): PromptInfo {
         val resampled = WindowedSincResampler.resample(reference, refSampleRate, DspConstants.SR)
         val rmsResult: RmsResult = RmsNormalizer.apply(resampled)
 
-        // 2) Prompt features (conditioning) from the reference log-mel.
         val promptLogMel = frontend.computeLogMel(rmsResult.signal)
         val promptLen = promptLogMel.size / DspConstants.N_MELS
         require(promptLen > 0) { "Reference produced no mel frames" }
         val promptFeatures = FloatArray(promptLogMel.size)
         for (i in promptLogMel.indices) promptFeatures[i] = promptLogMel[i] * DspConstants.FEAT_SCALE
 
-        // 3) Tokenize.
-        val targetIds = tokenizer.toIds(tokenizer.addPunctuation(targetText))
+        // Reference transcript must also tokenize.
         val promptIds = tokenizer.toIds(tokenizer.addPunctuation(refTranscript))
-        require(targetIds.isNotEmpty()) { "NO_TOKENS" }
         require(promptIds.isNotEmpty()) { "EMPTY_TRANSCRIPT" }
 
+        return PromptInfo(promptFeatures, promptIds, promptLen, rmsResult)
+    }
+
+    // ---------------------------------------------------------------------
+    // Single-sentence synthesis (steps 3-9).
+    // ---------------------------------------------------------------------
+    private fun synthesizeChunk(
+        targetText: String,
+        prompt: PromptInfo,
+        steps: Int,
+        guidance: Float,
+        speed: Float,
+        onProgress: (done: Int, total: Int) -> Unit
+    ): FloatArray {
+        val promptLen = prompt.promptLen
+        val promptFeatures = prompt.promptFeatures
+
+        // 3) Tokenize.
+        val targetIds = tokenizer.toIds(tokenizer.addPunctuation(targetText))
+        require(targetIds.isNotEmpty()) { "NO_TOKENS" }
+
         // 4) Text encoder -> text_condition [1, T, 100].
-        val textCondition = engine.textEncoder(targetIds, promptIds, promptLen, speed)
+        val textCondition = engine.textEncoder(targetIds, prompt.promptTokenIds, promptLen, speed)
         val totalFrames = textCondition.size / DspConstants.N_MELS
         require(totalFrames > promptLen) { "REF_LONGER" }
 
@@ -90,13 +143,12 @@ class Synthesizer(
         val audio = vocoder.synthesize(mels, keep)
 
         // 9) Undo any RMS boost (only when it was applied), then clip.
-        val out = if (rmsResult.boosted) {
-            val f = rmsResult.originalRms / DspConstants.TARGET_RMS
+        return if (prompt.rmsResult.boosted) {
+            val f = prompt.rmsResult.originalRms / DspConstants.TARGET_RMS
             applyAndClip(RmsNormalizer.scale(audio, f))
         } else {
             applyAndClip(audio)
         }
-        return out
     }
 
     private fun flowSample(
@@ -131,6 +183,46 @@ class Synthesizer(
             else if (audio[i] < -1f) audio[i] = -1f
         }
         return audio
+    }
+
+    private fun concat(parts: List<FloatArray>): FloatArray {
+        var total = 0
+        for (p in parts) total += p.size
+        val out = FloatArray(total)
+        var pos = 0
+        for (p in parts) {
+            System.arraycopy(p, 0, out, pos, p.size)
+            pos += p.size
+        }
+        return out
+    }
+
+    companion object {
+        // Devanagari danda (।), double danda (॥) + common sentence terminators.
+        private val SENTENCE_BREAKS = charArrayOf('।', '॥', '.', '!', '?', '；', '：', '。', '！', '？')
+
+        /**
+         * Split text into sentence-sized chunks, keeping the punctuation delimiter
+         * attached to the preceding sentence. Runs of whitespace are trimmed.
+         * A single very long sentence with no terminator is returned as-is.
+         */
+        fun splitSentences(text: String): List<String> {
+            val trimmed = text.trim()
+            if (trimmed.isEmpty()) return emptyList()
+            val chunks = ArrayList<String>()
+            val current = StringBuilder()
+            for (ch in trimmed) {
+                current.append(ch)
+                if (ch in SENTENCE_BREAKS) {
+                    var s = current.toString().trim()
+                    if (s.isNotEmpty()) chunks.add(s)
+                    current.setLength(0)
+                }
+            }
+            val rest = current.toString().trim()
+            if (rest.isNotEmpty()) chunks.add(rest)
+            return chunks
+        }
     }
 }
 
