@@ -73,7 +73,7 @@ class MainActivity : AppCompatActivity() {
         val items = listOf("8", "12", "16", "20", "24", "32")
         binding.spinnerSteps.adapter =
             ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, items)
-        binding.spinnerSteps.setSelection(3) // 20 default
+        binding.spinnerSteps.setSelection(0) // default = 8 (fast preset)
     }
 
     private fun setupSliders() {
@@ -177,7 +177,7 @@ class MainActivity : AppCompatActivity() {
         val target = binding.targetText.text?.toString() ?: ""
         if (target.isBlank()) { toast(getString(R.string.err_empty_target)); return }
 
-        val steps = binding.spinnerSteps.selectedItem?.toString()?.toIntOrNull() ?: 20
+        val steps = binding.spinnerSteps.selectedItem?.toString()?.toIntOrNull() ?: 8
         val guidance = binding.sliderGuidance.value
         val speed = binding.sliderSpeed.value
         val syn = synthesizer
