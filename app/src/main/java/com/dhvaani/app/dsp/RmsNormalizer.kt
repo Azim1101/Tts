@@ -19,20 +19,8 @@ data class RmsResult(
  * its RMS equals the target (this also amplifies any background noise — see the
  * honest-limitations list). Otherwise it is left untouched. The vocoder uses
  * [originalRms] to undo this boost before the final output clip.
- *
- * ## Output headroom (v0.7.5)
- *
- * Previously the vocoder-output-then-unboost path could push peaks to ±1.0
- * which hard-clips on playback (visible in v0.5 benchmark: outputs had
- * `peak 1.0` even though reference was `peak 0.51`). We now keep a small
- * headroom (PEAK_HEADROOM = 0.95) so even after a vocoder overshoot the output
- * does not clip. The downside is ~0.5 dB of level — inaudible on phone
- * speakers.
  */
 object RmsNormalizer {
-
-    /** Output peak will be at most ±PEAK_HEADROOM after unboost. */
-    const val PEAK_HEADROOM = 0.95f
 
     fun apply(input: FloatArray): RmsResult {
         if (input.isEmpty()) return RmsResult(input, 0f, false)
@@ -56,20 +44,10 @@ object RmsNormalizer {
         return sqrt(sum / input.size).toFloat()
     }
 
-    /**
-     * Multiply every sample by [factor] and clamp into
-     * [-PEAK_HEADROOM, +PEAK_HEADROOM] so the final PCM stream never hits
-     * the rails. `PEAK_HEADROOM = 0.95` is the safety margin the
-     * vocoder-induced overshoot needs.
-     */
+    /** Multiply every sample by [factor] (used to undo an RMS boost). */
     fun scale(input: FloatArray, factor: Float): FloatArray {
         val out = FloatArray(input.size)
-        val lo = -PEAK_HEADROOM
-        val hi = PEAK_HEADROOM
-        for (i in input.indices) {
-            val v = input[i] * factor
-            out[i] = if (v > hi) hi else if (v < lo) lo else v
-        }
+        for (i in input.indices) out[i] = input[i] * factor
         return out
     }
 }

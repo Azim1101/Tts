@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.os.SystemClock
 import android.util.Log
 import android.view.View
+import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
@@ -47,16 +48,6 @@ class MainActivity : AppCompatActivity() {
     // auto-download completes and the status becomes "Ready" again.
     private var currentToast: Toast? = null
 
-    // ------------------------------------------------------------------
-    // Synthesis parameters — hard-coded in v0.7.5 (the steps/guidance/speed
-    // sliders were removed for the simpler one-tap-clone UI). These match the
-    // values the README and the original `dhvaani_torchfree.py` reference
-    // script treat as the "fast preset".
-    // ------------------------------------------------------------------
-    private val steps: Int = 8
-    private val guidance: Float = 1.0f
-    private val speed: Float = 1.0f
-
     private val recordPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             if (granted) startRecording() else toast(getString(R.string.err_empty_ref))
@@ -74,6 +65,8 @@ class MainActivity : AppCompatActivity() {
 
         binding.btnSynthesize.isEnabled = false
 
+        setupSpinner()
+        setupSliders()
         setupListeners()
 
         // Kick off model loading off the UI thread immediately.
@@ -84,6 +77,25 @@ class MainActivity : AppCompatActivity() {
     // ------------------------------------------------------------------
     // UI setup
     // ------------------------------------------------------------------
+    private fun setupSpinner() {
+        val items = listOf("8", "12", "16", "20", "24", "32")
+        binding.spinnerSteps.adapter =
+            ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, items)
+        binding.spinnerSteps.setSelection(0) // default = 8 (fast preset)
+    }
+
+    private fun setupSliders() {
+        binding.sliderGuidance.valueFrom = 0.5f
+        binding.sliderGuidance.valueTo = 3.0f
+        binding.sliderGuidance.stepSize = 0.1f
+        binding.sliderGuidance.value = 1.0f
+
+        binding.sliderSpeed.valueFrom = 0.5f
+        binding.sliderSpeed.valueTo = 1.5f
+        binding.sliderSpeed.stepSize = 0.05f
+        binding.sliderSpeed.value = 1.0f
+    }
+
     private fun setupListeners() {
         binding.btnRecord.setOnClickListener { toggleRecord() }
 
@@ -175,6 +187,9 @@ class MainActivity : AppCompatActivity() {
         val target = binding.targetText.text?.toString() ?: ""
         if (target.isBlank()) { toast(getString(R.string.err_empty_target)); return }
 
+        val steps = binding.spinnerSteps.selectedItem?.toString()?.toIntOrNull() ?: 8
+        val guidance = binding.sliderGuidance.value
+        val speed = binding.sliderSpeed.value
         val syn = synthesizer
         if (syn == null) {
             // Defensive: the button should be disabled while models are missing,

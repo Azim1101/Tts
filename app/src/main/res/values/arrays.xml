@@ -1,7 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- The steps / guidance / speed selectors were removed in v0.7.5
-         (hard-coded constants in MainActivity). This file is kept as an
-         empty resources declaration so future string-arrays can be added
-         without recreating it. -->
+    <string-array name="steps">
+        <item>8</item>
+        <item>12</item>
+        <item>16</item>
+        <item>20</item>
+        <item>24</item>
+        <item>32</item>
+    </string-array>
 </resources>
