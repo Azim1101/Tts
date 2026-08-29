@@ -3,7 +3,6 @@ package com.dhvaani.app.onnx
 import ai.onnxruntime.OnnxTensor
 import ai.onnxruntime.OrtEnvironment
 import ai.onnxruntime.OrtSession
-import android.os.SystemClock
 import android.util.Log
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
@@ -37,10 +36,7 @@ class OnnxEngine(
     private val encoderPath: String,
     private val fmDecoderPath: String,
     private val vocoderBackbonePath: String,
-    // SD680 has 8 cores; SD888/8 Gen 1/2/3 have 8 too. Older devices cap at 4.
-    // We allow up to 8 (the ORT practical sweet spot for int8 transformer-ish
-    // graphs); the previous 4-cap was the v0.5-v0.7 bottleneck on modern SoCs.
-    private val threads: Int = Runtime.getRuntime().availableProcessors().coerceIn(1, 8)
+    private val threads: Int = Runtime.getRuntime().availableProcessors().coerceIn(1, 4)
 ) : AutoCloseable {
 
     private val env: OrtEnvironment = OrtEnvironment.getEnvironment()
@@ -67,25 +63,17 @@ class OnnxEngine(
      * back to plain CPU so the app stays usable.
      */
     private fun createSession(path: String, label: String): OrtSession {
-        val t0 = SystemClock.elapsedRealtime()
         try {
             val opts = OrtSession.SessionOptions()
             opts.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
             opts.setIntraOpNumThreads(threads)
             opts.setInterOpNumThreads(threads)
-            // Memory pattern optimization lets ORT reuse pre-allocated buffers
-            // across inferences. Some ORT Android AARs throw (Error, not
-            // Exception) when the option is unsupported, so we catch Throwable.
-            try { opts.setMemoryPatternOptimization(true) } catch (_: Throwable) {}
-            // CPU arena allocator keeps a small pool and avoids malloc/free churn.
-            try { opts.setCPUArenaAllocator(true) } catch (_: Throwable) {}
             val xnnOpts = HashMap<String, String>()
             xnnOpts["intra_op_num_threads"] = threads.toString()
             opts.addXnnpack(xnnOpts)
             val session = env.createSession(path, opts)
-            try { opts.close() } catch (_: Throwable) {}
-            val ms = SystemClock.elapsedRealtime() - t0
-            Log.i(TAG, "createSession($label): XNNPACK OK (threads=$threads, ${ms}ms)")
+            try { opts.close() } catch (_: Exception) {}
+            Log.i(TAG, "createSession($label): XNNPACK OK")
             return session
         } catch (e: Throwable) {
             Log.w(TAG, "createSession($label): XNNPACK failed (${e::class.java.simpleName}: ${e.message}); falling back to CPU")
@@ -95,17 +83,13 @@ class OnnxEngine(
 
     /** Plain CPU session, used as the universal fallback. */
     private fun createSessionCpu(path: String, label: String): OrtSession {
-        val t0 = SystemClock.elapsedRealtime()
         val opts = OrtSession.SessionOptions()
         opts.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
         opts.setIntraOpNumThreads(threads)
         opts.setInterOpNumThreads(threads)
-        try { opts.setMemoryPatternOptimization(true) } catch (_: Throwable) {}
-        try { opts.setCPUArenaAllocator(true) } catch (_: Throwable) {}
         val session = env.createSession(path, opts)
-        try { opts.close() } catch (_: Throwable) {}
-        val ms = SystemClock.elapsedRealtime() - t0
-        Log.i(TAG, "createSession($label): CPU OK (threads=$threads, ${ms}ms)")
+        try { opts.close() } catch (_: Exception) {}
+        Log.i(TAG, "createSession($label): CPU OK")
         return session
     }
 
@@ -162,7 +146,6 @@ class OnnxEngine(
         val scTensor = floatTensor3D(speechCondition, length)
         val gTensor = floatScalar(guidanceScale)
 
-        val t0 = SystemClock.elapsedRealtime()
         try {
             val result = fmDecoder.run(
                 mapOf(
@@ -181,8 +164,6 @@ class OnnxEngine(
             return arr
         } finally {
             tTensor.close(); xTensor.close(); tcTensor.close(); scTensor.close(); gTensor.close()
-            val ms = SystemClock.elapsedRealtime() - t0
-            if (ms > 100) Log.d(TAG, "fmDecoder: T=$length, ${ms}ms")
         }
     }
 
