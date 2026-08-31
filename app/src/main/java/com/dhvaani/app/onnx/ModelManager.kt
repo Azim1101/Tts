@@ -4,28 +4,22 @@ import android.content.Context
 import android.content.res.AssetManager
 import android.util.Log
 import com.dhvaani.app.dsp.DspConstants
+import com.dhvaani.app.model.ModelSpec
 import com.dhvaani.app.tts.Tokenizer
 import java.io.ByteArrayInputStream
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileOutputStream
 
 /**
- * Resolves and materialises the model assets.
+ * Resolves and materialises the selected model's engine graphs.
  *
- * This is the **v0.5.0-style** simple prepare: it copies any model files
- * that exist in APK `assets/` (or in `filesDir/models/` from a prior run)
- * and reports the on-disk paths. There is no `setOf`/`filter` chain, no
- * minBytes thresholds, and no read-side `for (name in setOf(...))` — the
- * v0.7 `setOf(encoderAsset, fmAsset, …)` getter evaluation in `prepare()`
- * was the most likely site of the `List.iterator()` NPE the user reported.
+ * The app favours a **small APK**: model weights are downloaded from Hugging Face
+ * into `filesDir/models/` on first use. Bundled `assets/` are still honoured for
+ * a partially-offline/bundled build, but they are optional.
  *
- * The (large) `.onnx` graphs are copied once to `filesDir/models/` so
- * onnxruntime can memory-map them directly; on subsequent launches the
- * existing copy is reused.
- *
- * int8 graphs are preferred, with an automatic fallback to the fp32
- * variants (`text_encoder.onnx` / `fm_decoder.onnx`) when the int8 files
- * are absent.
+ * Resolution order per engine graph: `filesDir/models` first, then APK assets
+ * (for an optional bundled build).
  */
 class ModelManager(private val context: Context) {
 
@@ -43,71 +37,91 @@ class ModelManager(private val context: Context) {
     private val modelsDir: File get() = File(context.filesDir, "models")
 
     /**
-     * Make sure the required files are present and report the on-disk paths.
+     * Resolve the engine graphs for [spec].
      *
-     * Logic (mirrors v0.5.0, which the user confirmed was working):
-     * 1. Pick int8 file names if present, else fall back to fp32 names.
-     * 2. If any of the chosen names is missing from BOTH assets and
-     *    filesDir/models, return ready=false with a useful message.
-     * 3. Otherwise copy from assets to filesDir (idempotent — skips files
-     *    that already exist on disk with non-zero size) and return ready=true
-     *    with the absolute paths.
+     * @return ready=true with absolute on-disk paths when all graphs can be
+     *         found in filesDir/models or copied from assets; ready=false with a
+     *         human-readable message otherwise.
      */
-    fun prepare(): Models {
+    fun prepare(spec: ModelSpec): Models {
         if (!modelsDir.exists()) modelsDir.mkdirs()
 
-        val encoderAsset =
-            if (assetExists(DspConstants.ENCODER_INT8)) DspConstants.ENCODER_INT8
-            else DspConstants.ENCODER_FP32
-        val fmAsset =
-            if (assetExists(DspConstants.FM_DECODER_INT8)) DspConstants.FM_DECODER_INT8
-            else DspConstants.FM_DECODER_FP32
-        val vocoderAsset = DspConstants.VOCODER_BACKBONE
+        val (encNames, fmNames, vocNames) = graphCandidates(spec)
 
-        if (!assetExists(vocoderAsset) || !assetExists(encoderAsset) || !assetExists(fmAsset)) {
-            Log.w(TAG, "prepare: at least one model missing from assets (encoder=$encoderAsset fm=$fmAsset vocoder=$vocoderAsset)")
+        val encoderName = resolveGraph(encNames)
+        val fmName = resolveGraph(fmNames)
+        val vocoderName = resolveGraph(vocNames)
+
+        if (encoderName == null || fmName == null || vocoderName == null) {
+            val missing = listOfNotNull(
+                encoderName?.let { null } ?: encNames.first(),
+                fmName?.let { null } ?: fmNames.first(),
+                vocoderName?.let { null } ?: vocNames.first()
+            )
+            Log.w(TAG, "prepare(${spec.id}): missing $missing")
             return Models(
                 ready = false,
-                message = "Model assets missing. Run scripts/download_models.sh before building, or use the in-app download.",
+                message = "Model ${spec.title} is not downloaded. Tap \"Download models\".",
                 encoderPath = "", fmDecoderPath = "", vocoderBackbonePath = ""
             )
         }
 
-        val encoderFile = copyToModels(encoderAsset)
-        val fmFile = copyToModels(fmAsset)
-        val backboneFile = copyToModels(vocoderAsset)
+        val encoderFile = materialise(encoderName)
+        val fmFile = materialise(fmName)
+        val backboneFile = materialise(vocoderName)
 
         if (encoderFile == null || fmFile == null || backboneFile == null) {
-            Log.e(TAG, "prepare: copyToModels failed (encoder=$encoderFile fm=$fmFile vocoder=$backboneFile)")
+            Log.e(TAG, "prepare(${spec.id}): materialise failed (encoder=$encoderFile fm=$fmFile vocoder=$backboneFile)")
             return Models(false, "Failed to extract model files.", "", "", "")
         }
-        Log.i(TAG, "prepare: OK encoder=${encoderFile.absolutePath} fm=${fmFile.absolutePath} vocoder=${backboneFile.absolutePath}")
+        Log.i(TAG, "prepare(${spec.id}): OK encoder=${encoderFile.absolutePath} fm=${fmFile.absolutePath} vocoder=${backboneFile.absolutePath}")
         return Models(
             true, "ok",
             encoderFile.absolutePath, fmFile.absolutePath, backboneFile.absolutePath
         )
     }
 
-    /** Copy a single asset to `filesDir/models/` if it's not already there. */
-    private fun copyToModels(assetName: String): File? {
+    /** Potential graph file names for a model spec, best-first. */
+    private fun graphCandidates(spec: ModelSpec): Triple<Array<String>, Array<String>, Array<String>> {
+        // MNN-only build.
+        return Triple(
+            arrayOf(DspConstants.MNN_ENCODER_INT8),
+            arrayOf(DspConstants.MNN_FM_DECODER_INT8),
+            arrayOf(DspConstants.MNN_VOCODER_BACKBONE)
+        )
+    }
+
+    /** First candidate present in filesDir/models or assets, or null. */
+    private fun resolveGraph(candidates: Array<String>): String? {
+        for (name in candidates) {
+            if (File(modelsDir, name).length() > 0L || assetExists(name)) return name
+        }
+        return null
+    }
+
+    /** Copy an asset (if needed) or reuse the downloaded file in filesDir/models. */
+    private fun materialise(name: String): File? {
+        val target = File(modelsDir, name)
+        if (target.length() > 0L) return target
+        if (!assetExists(name)) return null
+        return copyAssetToModels(name)
+    }
+
+    private fun copyAssetToModels(assetName: String): File? {
         val target = File(modelsDir, assetName)
-        if (target.length() > 0L) return target  // already extracted
         return try {
             assets.open(assetName).use { input ->
                 FileOutputStream(target).use { out -> input.copyTo(out) }
             }
             target
         } catch (e: Exception) {
-            Log.e(TAG, "copyToModels: failed for $assetName", e)
+            Log.e(TAG, "copyAssetToModels failed for $assetName", e)
             null
         }
     }
 
     private fun assetExists(name: String): Boolean {
         return try {
-            // AssetManager.list(path) returns the names in the given asset
-            // directory; on the root we pass "". The result is nullable on
-            // some Android versions, hence the safe-call.
             val list: Array<String>? = assets.list("")
             list?.any { it == name } == true
         } catch (e: Exception) {
@@ -117,18 +131,27 @@ class ModelManager(private val context: Context) {
 
     fun readAsset(name: String): ByteArray = assets.open(name).use { it.readBytes() }
 
+    /** Read a small file from filesDir/models if present, else from assets. */
+    private fun readFileOrAsset(name: String): ByteArray {
+        val file = File(modelsDir, name)
+        if (file.length() > 0L) {
+            return FileInputStream(file).use { it.readBytes() }
+        }
+        return readAsset(name)
+    }
+
     fun loadMelFb(): MelFilterbank {
-        val bytes = readAsset(DspConstants.MEL_FB_BIN)
+        val bytes = readFileOrAsset(DspConstants.MEL_FB_BIN)
         return MelFilterbank.fromBytes(ByteArrayInputStream(bytes))
     }
 
     fun loadVocosHead(): VocosHead {
-        val bytes = readAsset(DspConstants.VOCOS_HEAD_BIN)
+        val bytes = readFileOrAsset(DspConstants.VOCOS_HEAD_BIN)
         return VocosHead.fromBytes(ByteArrayInputStream(bytes))
     }
 
     fun loadTokenizer(): Tokenizer {
-        val text = readAsset(DspConstants.TOKENS_TXT).toString(Charsets.UTF_8)
+        val text = readFileOrAsset(DspConstants.TOKENS_TXT).toString(Charsets.UTF_8)
         return Tokenizer.fromFileContent(text)
     }
 

@@ -31,6 +31,22 @@
                 android:textIsSelectable="true" />
         </com.google.android.material.card.MaterialCardView>
 
+        <!-- Model selector -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/label_model"
+            android:textAppearance="@style/TextAppearance.Material3.TitleMedium"
+            android:textColor="@color/primary"
+            android:layout_marginBottom="4dp" />
+
+        <Spinner
+            android:id="@+id/modelSpinner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            android:contentDescription="@string/label_model" />
+
         <!-- Reference section -->
         <TextView
             android:layout_width="wrap_content"

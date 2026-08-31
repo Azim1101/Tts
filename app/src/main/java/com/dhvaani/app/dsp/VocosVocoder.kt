@@ -1,6 +1,6 @@
 package com.dhvaani.app.dsp
 
-import com.dhvaani.app.onnx.OnnxEngine
+import com.dhvaani.app.onnx.ModelEngine
 import com.dhvaani.app.onnx.VocosHead
 import kotlin.math.cos
 import kotlin.math.exp
@@ -8,15 +8,15 @@ import kotlin.math.ln
 import kotlin.math.sin
 
 /**
- * Vocos vocoder in pure Kotlin. The ConvNeXt backbone runs through onnxruntime;
+ * Vocos vocoder in pure Kotlin. The ConvNeXt backbone runs through MNN;
  * the linear head, magnitude/phase split and overlap-add inverse STFT are done
  * on the CPU in Java/Kotlin (no numpy).
  *
  * Input `mels` is [N_MELS x numFrames] laid out as mel-channel-major
- * (`mels[mel*numFrames + frame]`), matching the ONNX `[1,100,T]` expectation.
+ * (`mels[mel*numFrames + frame]`), matching the graph's `[1,100,T]` expectation.
  */
 class VocosVocoder(
-    private val engine: OnnxEngine,
+    private val engine: ModelEngine,
     private val head: VocosHead
 ) {
 

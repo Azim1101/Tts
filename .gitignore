@@ -17,9 +17,16 @@ captures/
 
 # Model assets are downloaded by scripts/download_models.sh, not committed.
 app/src/main/assets/*.onnx
+app/src/main/assets/*.mnn
 app/src/main/assets/*.npz
 app/src/main/assets/*.bin
+app/src/main/assets/*.json
 app/src/main/assets/tokens.txt
+
+# Optional MNN Android runtime downloaded by scripts/setup_mnn_runtime.sh.
+app/libs/*.jar
+app/libs/*.aar
+app/src/main/jniLibs/**/*.so
 
 # Python
 __pycache__/

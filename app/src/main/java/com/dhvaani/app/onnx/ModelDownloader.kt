@@ -1,6 +1,7 @@
 package com.dhvaani.app.onnx
 
 import com.dhvaani.app.dsp.DspConstants
+import com.dhvaani.app.model.ModelSpec
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -9,10 +10,12 @@ import java.net.URL
 import javax.net.ssl.HttpsURLConnection
 
 /**
- * Downloads the ONNX graphs and feature assets from Hugging Face directly onto
- * the device (the "models on first launch" path), so the app no longer depends on
- * a developer pre-running `download_models.sh`. Streaming + retry + size check
- * handle the large `fm_decoder_int8.onnx` (~125 MB) which can truncate.
+ * Downloads a [ModelSpec]'s graphs/features from Hugging Face directly onto the
+ * device (the "first launch download" path), so the APK stays small and no model
+ * files need to be committed or bundled.
+ *
+ * Streaming + retry + minimum-byte-size check handle the large
+ * `fm_decoder_int8.onnx` / `.mnn` (~125 MB) which can truncate.
  *
  * The small feature files come as `.npz`; they are converted to the app's `.bin`
  * format here using [NpzParser] (no Python/NumPy at runtime).
@@ -21,19 +24,7 @@ import javax.net.ssl.HttpsURLConnection
  */
 object ModelDownloader {
 
-    private const val BASE = "https://huggingface.co/Bbkblo/DhVaani-0.5-ONNX/resolve/main"
     private const val MAX_ATTEMPTS = 5
-
-    data class Spec(val assetName: String, val remotePath: String, val minBytes: Long)
-
-    val SPECS: List<Spec> = listOf(
-        Spec(DspConstants.ENCODER_INT8, "$BASE/${DspConstants.ENCODER_INT8}", 5_000_000),
-        Spec(DspConstants.FM_DECODER_INT8, "$BASE/${DspConstants.FM_DECODER_INT8}", 110_000_000),
-        Spec(DspConstants.VOCODER_BACKBONE, "$BASE/${DspConstants.VOCODER_BACKBONE}", 30_000_000),
-        Spec("mel_fb.npz", "$BASE/mel_fb.npz", 150_000),
-        Spec("vocos_head.npz", "$BASE/vocos_head.npz", 1_000_000),
-        Spec(DspConstants.TOKENS_TXT, "$BASE/${DspConstants.TOKENS_TXT}", 1_000)
-    )
 
     /** Progress callback: (fileIndex 1-based, fileCount, fileName, fraction 0..1). */
     fun interface Progress {
@@ -41,26 +32,32 @@ object ModelDownloader {
     }
 
     /**
-     * Ensure every model file in [needed] exists in [dir], downloading and then
-     * generating the derived `.bin` files. Returns true when all are present.
+     * Ensure every file in [spec] exists in [dir], downloading and then generating
+     * the derived `.bin` files. Returns true when all files are present.
      */
-    fun downloadMissing(dir: File, needed: List<String>, progress: Progress): Boolean {
-        val toFetch = SPECS.filter { needed.contains(it.assetName) && File(dir, it.assetName).length() < it.minBytes }
+    fun downloadMissing(dir: File, spec: ModelSpec, progress: Progress): Boolean {
+        val toFetch = spec.files.filter {
+            File(dir, it.name).length() < it.minBytes
+        }
         val totalFiles = toFetch.size
-        toFetch.forEachIndexed { idx, spec ->
-            val target = File(dir, spec.assetName)
-            if (!downloadFile(spec.remotePath, target, spec.minBytes) { f ->
-                    progress.onProgress(idx + 1, totalFiles, spec.assetName, f)
+        toFetch.forEachIndexed { idx, file ->
+            val target = File(dir, file.name)
+            val remote = "${spec.baseUrl}/${file.name}"
+            if (!downloadFile(remote, target, file.minBytes) { f ->
+                    progress.onProgress(idx + 1, totalFiles, file.name, f)
                 }
             ) {
                 return false
             }
-            progress.onProgress(idx + 1, totalFiles, spec.assetName, 1f)
+            progress.onProgress(idx + 1, totalFiles, file.name, 1f)
         }
         // Convert npz -> bin (the loaders read the .bin files).
         generateBins(dir)
-        // Re-check: derived .bin + tokens present.
-        return needed.all { File(dir, it).length() > 0 }
+        // Re-check every spec file is present (and minimally sized) on disk.
+        return spec.files.all {
+            val f = File(dir, it.name)
+            f.length() > 0L && f.length() >= it.minBytes
+        }
     }
 
     private fun downloadFile(url: String, dest: File, minBytes: Long, onByte: (Float) -> Unit): Boolean {
@@ -74,7 +71,7 @@ object ModelDownloader {
                     readTimeout = 180_000
                     instanceFollowRedirects = true
                     requestMethod = "GET"
-                    setRequestProperty("User-Agent", "DhVaani-android/0.6")
+                    setRequestProperty("User-Agent", "DhVaani-android/0.8")
                 }
                 val code = conn.responseCode
                 if (code !in 200..299) {
@@ -114,13 +111,13 @@ object ModelDownloader {
     // ---------------------------------------------------------------------
     @Synchronized
     fun generateBins(dir: File) {
-        val melNpz = File(dir, "mel_fb.npz")
+        val melNpz = File(dir, DspConstants.MEL_FB_NPZ)
         if (melNpz.length() > 0 && !File(dir, DspConstants.MEL_FB_BIN).exists()) {
             try {
                 writeMelFb(melNpz, File(dir, DspConstants.MEL_FB_BIN))
             } catch (_: Exception) {}
         }
-        val headNpz = File(dir, "vocos_head.npz")
+        val headNpz = File(dir, DspConstants.VOCOS_HEAD_NPZ)
         if (headNpz.length() > 0 && !File(dir, DspConstants.VOCOS_HEAD_BIN).exists()) {
             try {
                 writeVocosHead(headNpz, File(dir, DspConstants.VOCOS_HEAD_BIN))

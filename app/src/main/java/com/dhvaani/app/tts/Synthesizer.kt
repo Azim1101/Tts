@@ -6,7 +6,7 @@ import com.dhvaani.app.dsp.RmsResult
 import com.dhvaani.app.dsp.VocosFrontend
 import com.dhvaani.app.dsp.VocosVocoder
 import com.dhvaani.app.dsp.WindowedSincResampler
-import com.dhvaani.app.onnx.OnnxEngine
+import com.dhvaani.app.onnx.ModelEngine
 import kotlin.math.ln
 import kotlin.math.cos
 import kotlin.math.sin
@@ -28,7 +28,7 @@ import kotlin.math.sqrt
  * and latency) bounded, while the reference conditioning stays constant.
  */
 class Synthesizer(
-    private val engine: OnnxEngine,
+    private val engine: ModelEngine,
     private val tokenizer: Tokenizer,
     private val frontend: VocosFrontend,
     private val vocoder: VocosVocoder

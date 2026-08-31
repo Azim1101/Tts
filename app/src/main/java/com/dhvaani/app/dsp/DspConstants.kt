@@ -23,12 +23,18 @@ object DspConstants {
     const val HIDDEN_DIM = 512
     const val OUT_DIM = 1026      // 513 magnitude + 513 phase
 
-    // ---- Model file names (inside assets/ and filesDir/models/) ----
-    const val ENCODER_INT8 = "text_encoder_int8.onnx"
-    const val ENCODER_FP32 = "text_encoder.onnx"
-    const val FM_DECODER_INT8 = "fm_decoder_int8.onnx"
-    const val FM_DECODER_FP32 = "fm_decoder.onnx"
-    const val VOCODER_BACKBONE = "vocoder_backbone.onnx"
+    // ---- Model file names (inside filesDir/models/ and optional assets/) ----
+    // MNN backend (downloaded from Bbkblo/DhVaani-0.5-MNN).
+    const val MNN_ENCODER_INT8 = "text_encoder_int8.mnn"
+    const val MNN_FM_DECODER_INT8 = "fm_decoder_int8.mnn"
+    const val MNN_VOCODER_BACKBONE = "vocoder_backbone.mnn"
+    // The MNN repo ships the small features as mel_fb.npz / vocos_head.npz plus
+    // model.json; the on-device .npz->.bin converter makes mel_fb.bin etc.
+    const val MODEL_JSON = "model.json"
+
+    // Shared small files (both backends).
+    const val MEL_FB_NPZ = "mel_fb.npz"
+    const val VOCOS_HEAD_NPZ = "vocos_head.npz"
     const val VOCOS_HEAD_BIN = "vocos_head.bin"
     const val MEL_FB_BIN = "mel_fb.bin"
     const val TOKENS_TXT = "tokens.txt"
