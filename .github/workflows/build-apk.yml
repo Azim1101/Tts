@@ -69,6 +69,43 @@ jobs:
           echo "--- APK locations ---"
           find app/build/outputs -type f -name '*.apk' 2>/dev/null || echo "(no apk found)"
 
+      # Android native-libs test: verify the built APK actually contains the
+      # MNN runtime for the correct ABI. This catches the regression where the
+      # 32-bit armeabi-v7a .so files overwrote the arm64 ones during packaging,
+      # causing "MNN_RUNTIME_MISSING" on launch even on real arm64 phones.
+      - name: Android native-libs test (verify APK has 64-bit arm64 MNN libs)
+        run: |
+          set -e
+          APK="$(find app/build/outputs -type f -name '*.apk' | head -n 1)"
+          if [ -z "$APK" ]; then echo "no APK found"; exit 1; fi
+          echo "APK: $APK"
+          echo "--- lib/arm64-v8a contents in APK ---"
+          unzip -l "$APK" | grep 'lib/arm64-v8a/' || { echo "NO arm64-v8a native libs in APK"; exit 1; }
+          echo "--- required libs present? ---"
+          for lib in libMNN.so libmnncore.so libc++_shared.so; do
+            if unzip -l "$APK" | grep -q "lib/arm64-v8a/$lib"; then
+              echo "OK:  $lib present"
+            else
+              echo "FAIL: $lib MISSING from lib/arm64-v8a/"
+              exit 1
+            fi
+          done
+          echo "--- must NOT ship 32-bit armeabi-v7a libs ---"
+          if unzip -l "$APK" | grep -q 'lib/armeabi-v7a/'; then
+            echo "FAIL: APK contains armeabi-v7a (32-bit) libs"
+            exit 1
+          fi
+          echo "OK:  no 32-bit armeabi-v7a libs"
+          echo "--- verify ELF architecture is 64-bit aarch64 ---"
+          rm -rf /tmp/apkx && mkdir -p /tmp/apkx && cd /tmp/apkx
+          unzip -o -q "$OLDPWD/$APK" 'lib/arm64-v8a/libMNN.so' 'lib/arm64-v8a/libmnncore.so'
+          for f in lib/arm64-v8a/libMNN.so lib/arm64-v8a/libmnncore.so; do
+            echo "== $f =="
+            file "$f"
+            file "$f" | grep -q 'ELF 64-bit.*aarch64' || { echo "FAIL: $f is NOT 64-bit aarch64"; exit 1; }
+          done
+          echo "ALL ANDROID NATIVE CHECKS PASSED"
+
       - name: Upload APK as artifact
         uses: actions/upload-artifact@v4
         with:

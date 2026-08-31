@@ -45,21 +45,37 @@ fi
 ( cd "$TMP" && unzip -q mnn_android.zip )
 
 echo "==> Installing arm64-v8a native libs"
-so_count=0
-# Prefer files inside an arm64/arm64-v8a path; fall back to everything named *.so.
-{
-  find "$TMP" -type f -name '*.so' -path '*arm64*'
-  find "$TMP" -type f -name '*.so'
-} | sort -u | while read -r f; do
+# The MNN Android package ships one subdirectory per ABI:
+#   .../arm64-v8a/     (64-bit ARM)
+#   .../armeabi-v7a/   (32-bit ARM)
+# This APK builds ONLY for arm64-v8a (see abiFilters in app/build.gradle.kts),
+# so we copy ONLY the arm64 binaries. We must NOT fall back to "everything
+# named *.so": the two ABIs share basenames (libMNN.so, libmnncore.so,
+# libc++_shared.so), and since "arm64-v8a" sorts before "armeabi-v7a" the old
+# logic copied the arm64 libs first and then OVERWROTE them with the 32-bit
+# armeabi-v7a ones. The APK then shipped 32-bit .so files that fail to load on
+# arm64 devices — surfacing as the "MNN_RUNTIME_MISSING" launch error even on
+# real phones.
+ARM_DIR="$(find "$TMP" -type d -name 'arm64-v8a' | head -n 1)"
+if [ -z "$ARM_DIR" ]; then
+  echo "ERROR: no arm64-v8a directory found inside the MNN package" >&2
+  rm -rf "$TMP"
+  exit 1
+fi
+
+shopt -s nullglob
+installed=0
+for f in "$ARM_DIR"/*.so; do
   cp "$f" "$JNI_DIR/"
   echo "   installed: $(basename "$f")"
+  installed=$((installed + 1))
 done
-
-# libc++_shared.so can live outside the arch folder (NDK layout).
-while read -r f; do
-  cp "$f" "$JNI_DIR/" || true
-  echo "   installed: $(basename "$f")"
-done < <(find "$TMP" -type f -name 'libc++_shared.so' | sort -u)
+shopt -u nullglob
+if [ "$installed" -eq 0 ]; then
+  echo "ERROR: no *.so files found in $ARM_DIR" >&2
+  rm -rf "$TMP"
+  exit 1
+fi
 
 echo "==> Verifying required MNN libraries"
 if [ ! -s "$JNI_DIR/libMNN.so" ]; then
@@ -74,11 +90,22 @@ if [ ! -s "$JNI_DIR/libmnncore.so" ]; then
 fi
 # libMNN.so / libmnncore.so are built against the NDK shared libc++; without
 # libc++_shared.so in the same dir the APK fails to load libMNN.so at runtime
-# (UnsatisfiedLinkError "dlopen failed ... not found") — surfaced as a cryptic
-# "com.taobao.android.mnn.MNNNetNative" error on launch. Fail the build here.
+# (UnsatisfiedLinkError "dlopen failed ... not found") — surfaced as the
+# "com.taobao.android.mnn.MNNNetNative" launch error. Fail the build here so
+# CI never ships a broken APK.
 if [ ! -s "$JNI_DIR/libc++_shared.so" ]; then
-  echo "WARN: $JNI_DIR/libc++_shared.so missing - MNN may fail to load at runtime" >&2
+  # Try the arm64 NDK libc++ if it lives elsewhere in the package.
+  CXX="$(find "$TMP" -type f -name 'libc++_shared.so' -path '*arm64*' | head -n 1)"
+  if [ -n "$CXX" ] && [ -s "$CXX" ]; then
+    cp "$CXX" "$JNI_DIR/libc++_shared.so"
+    echo "   installed: libc++_shared.so (from $CXX)"
+  fi
+fi
+if [ ! -s "$JNI_DIR/libc++_shared.so" ]; then
+  echo "ERROR: $JNI_DIR/libc++_shared.so missing - MNN cannot load without it" >&2
   echo "      Provide it via the NDK: find \$ANDROID_NDK -name libc++_shared.so" >&2
+  rm -rf "$TMP"
+  exit 1
 fi
 
 echo "==> MNN runtime ready in $JNI_DIR"
