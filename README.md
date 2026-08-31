@@ -105,7 +105,7 @@ Push a version tag and GitHub builds the APK **and** attaches it to a GitHub
 Release with a permanent `releases/latest` URL:
 
 ```bash
-git tag v1.2 && git push origin v1.2
+git tag v1.3 && git push origin v1.3
 ```
 
 Latest release: <https://github.com/Azim1101/Tts/releases/latest>
