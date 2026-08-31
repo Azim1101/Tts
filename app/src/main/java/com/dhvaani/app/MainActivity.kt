@@ -323,10 +323,11 @@ class MainActivity : AppCompatActivity() {
         try {
             if (!MnnEngine.isRuntimeAvailable()) {
                 runOnUiThread {
-                    status(getString(R.string.status_mnn_runtime_missing))
+                    binding.btnSynthesize.isEnabled = false
                     binding.btnDownloadModels.visibility = View.VISIBLE
                     binding.btnDownloadModels.isEnabled = true
-                    binding.btnSynthesize.isEnabled = false
+                    val abis = android.os.Build.SUPPORTED_ABIS.joinToString(", ")
+                    fail(getString(R.string.status_mnn_runtime_missing, abis))
                 }
                 return
             }

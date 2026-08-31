@@ -72,6 +72,14 @@ if [ ! -s "$JNI_DIR/libmnncore.so" ]; then
   rm -rf "$TMP"
   exit 1
 fi
+# libMNN.so / libmnncore.so are built against the NDK shared libc++; without
+# libc++_shared.so in the same dir the APK fails to load libMNN.so at runtime
+# (UnsatisfiedLinkError "dlopen failed ... not found") — surfaced as a cryptic
+# "com.taobao.android.mnn.MNNNetNative" error on launch. Fail the build here.
+if [ ! -s "$JNI_DIR/libc++_shared.so" ]; then
+  echo "WARN: $JNI_DIR/libc++_shared.so missing - MNN may fail to load at runtime" >&2
+  echo "      Provide it via the NDK: find \$ANDROID_NDK -name libc++_shared.so" >&2
+fi
 
 echo "==> MNN runtime ready in $JNI_DIR"
 echo "    Build with:  ./gradlew assembleDebug"

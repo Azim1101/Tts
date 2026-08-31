@@ -7,7 +7,7 @@
     <string name="status_ready_model">Ready: %1$s</string>
     <string name="status_model_selected">Selected: %1$s</string>
     <string name="status_wait_model_switch">Finish current task first, then model switch to %1$s will load.</string>
-    <string name="status_mnn_runtime_missing">MNN runtime not bundled. Install the APK built with scripts/setup_mnn_runtime.sh.</string>
+    <string name="status_mnn_runtime_missing">MNN runtime is not available on this device (ABI: %1$s). This APK ships arm64-v8a only, so it must run on a real arm64 Android phone — not an x86_64 emulator. Reinstall the APK built with scripts/setup_mnn_runtime.sh.</string>
     <string name="btn_record">🔴 Record</string>
     <string name="btn_stop">⏹ Stop</string>
     <string name="btn_play_ref">▶ Play ref</string>

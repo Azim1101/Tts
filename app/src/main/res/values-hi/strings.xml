@@ -7,7 +7,7 @@
     <string name="status_ready_model">तैयार: %1$s</string>
     <string name="status_model_selected">चुना गया: %1$s</string>
     <string name="status_wait_model_switch">पहले current कार्य पूरा करें, फिर %1$s लोड होगा।</string>
-    <string name="status_mnn_runtime_missing">MNN runtime संलग्न नहीं है। scripts/setup_mnn_runtime.sh से बना APK इंस्टॉल करें।</string>
+    <string name="status_mnn_runtime_missing">इस डिवाइस पर MNN runtime उपलब्ध नहीं है (ABI: %1$s)। यह APK केवल arm64-v8a के लिए है — इसे असली arm64 Android फ़ोन पर चलाएँ, x86_64 एमुलेटर पर नहीं। scripts/setup_mnn_runtime.sh से बना APK दोबारा इंस्टॉल करें।</string>
     <string name="btn_record">🔴 रिकॉर्ड</string>
     <string name="btn_stop">⏹ बंद</string>
     <string name="btn_play_ref">▶ संदर्भ सुनें</string>

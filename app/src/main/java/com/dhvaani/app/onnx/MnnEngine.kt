@@ -1,5 +1,6 @@
 package com.dhvaani.app.onnx
 
+import android.os.Build
 import android.util.Log
 import com.taobao.android.mnn.MNNForwardType
 import com.taobao.android.mnn.MNNNetInstance
@@ -164,36 +165,73 @@ private fun longArrayToIntArray(src: LongArray): IntArray {
     return out
 }
 
-/** Tries to load the MNN native libs once and remembers the result. */
+/**
+ * Loads the MNN native libs once (via MNNNetNative's static initializer) and
+ * remembers the result.
+ *
+ * IMPORTANT: the previous implementation checked `Class.forName("MNNNetInstance")`,
+ * which NEVER triggered the native load — the `.so` libraries are loaded inside
+ * `com.taobao.android.mnn.MNNNetNative`'s static block, and merely initializing
+ * `MNNNetInstance` does not initialise `MNNNetNative`. So `isRuntimeAvailable()`
+ * always returned true and the app proceeded to a confusing, cryptic
+ * `com.taobao.android.mnn.MNNNetNative` crash as soon as the first native call
+ * tried to load the libraries. We now force-load `MNNNetNative` directly so a
+ * missing/broken runtime is detected up-front and reported with the real reason
+ * (including the device ABI, since this APK ships arm64-v8a only).
+ */
 private object MnnNative {
     private var initialized = false
     private var ok = false
+    private var lastError: Throwable? = null
 
     fun available(): Boolean {
-        try {
+        return try {
             ensureAvailable()
-            return true
+            true
         } catch (t: Throwable) {
-            return false
+            false
         }
     }
 
     fun ensureAvailable() {
-        if (initialized && ok) return
+        if (initialized) {
+            if (ok) return
+            throw IllegalStateException(describe(), lastError)
+        }
         synchronized(this) {
-            if (initialized && ok) return
-            if (initialized && !ok) throw IllegalStateException(MSG_MISSING)
+            if (initialized) {
+                if (ok) return
+                throw IllegalStateException(describe(), lastError)
+            }
             try {
-                // The static init of MNNNetInstance loads libMNN.so + libmnncore.so.
-                Class.forName("com.taobao.android.mnn.MNNNetInstance")
+                // Force MNNNetNative's static block to run (loads libMNN.so,
+                // libMNN_Vulkan.so, libMNN_CL.so, libMNN_GL.so, libmnncore.so).
+                Class.forName("com.taobao.android.mnn.MNNNetNative")
                 initialized = true
                 ok = true
             } catch (t: Throwable) {
                 initialized = true
                 ok = false
-                throw IllegalStateException(MSG_MISSING, t)
+                lastError = t
+                throw IllegalStateException(describe(), t)
             }
         }
+    }
+
+    private fun describe(): String {
+        val abis = try {
+            Build.SUPPORTED_ABIS.joinToString(", ")
+        } catch (t: Throwable) {
+            "unknown"
+        }
+        val cause = lastError
+        val detail = when {
+            cause == null -> ""
+            cause.message != null -> "; ${cause.message}"
+            cause.cause?.message != null -> "; ${cause.cause.message}"
+            else -> "; ${cause.javaClass.simpleName}"
+        }
+        return "$MSG_MISSING (device abi: $abis$detail)"
     }
 
     private const val MSG_MISSING = "MNN_RUNTIME_MISSING"
