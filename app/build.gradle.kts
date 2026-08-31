@@ -11,8 +11,8 @@ android {
         applicationId = "com.dhvaani.app"
         minSdk = 24
         targetSdk = 34
-        versionCode = 8
-        versionName = "1.3"
+        versionCode = 9
+        versionName = "1.4"
         // Only ship the 64-bit ARM ABI that real phones run. This drops the stale
         // x86_64/armeabi-v7a native libs, shrinking the APK and ensuring the
         // optimised arm64 XNNPACK/NNAPI .so is the one used.
