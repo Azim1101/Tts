@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 #
-# Thin Gradle launcher for DhVaani.
+# Thin Gradle launcher for Swara.
 #
 # The project targets Gradle 8.7 (see gradle/wrapper/gradle-wrapper.properties).
 # This script resolves a Gradle 8.x installation the same way the official

@@ -1,7 +1,7 @@
-package com.dhvaani.app.dsp
+package com.swara.app.dsp
 
-import com.dhvaani.app.onnx.ModelEngine
-import com.dhvaani.app.onnx.VocosHead
+import com.swara.app.onnx.ModelEngine
+import com.swara.app.onnx.VocosHead
 import kotlin.math.cos
 import kotlin.math.exp
 import kotlin.math.ln

@@ -1,4 +1,4 @@
-package com.dhvaani.app.tts
+package com.swara.app.tts
 
 /**
  * Character-level Indic tokenizer backed by the model's `tokens.txt`

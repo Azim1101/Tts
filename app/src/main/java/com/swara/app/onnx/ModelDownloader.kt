@@ -1,7 +1,7 @@
-package com.dhvaani.app.onnx
+package com.swara.app.onnx
 
-import com.dhvaani.app.dsp.DspConstants
-import com.dhvaani.app.model.ModelSpec
+import com.swara.app.dsp.DspConstants
+import com.swara.app.model.ModelSpec
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
@@ -71,7 +71,7 @@ object ModelDownloader {
                     readTimeout = 180_000
                     instanceFollowRedirects = true
                     requestMethod = "GET"
-                    setRequestProperty("User-Agent", "DhVaani-android/0.8")
+                    setRequestProperty("User-Agent", "Swara-android/2.0")
                 }
                 val code = conn.responseCode
                 if (code !in 200..299) {

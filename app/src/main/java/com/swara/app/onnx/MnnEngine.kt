@@ -1,4 +1,4 @@
-package com.dhvaani.app.onnx
+package com.swara.app.onnx
 
 import android.os.Build
 import android.util.Log
@@ -6,7 +6,7 @@ import com.taobao.android.mnn.MNNForwardType
 import com.taobao.android.mnn.MNNNetInstance
 
 /**
- * MNN backend for the DhVaani `.mnn` graphs
+ * MNN backend for the Swara `.mnn` graphs
  * (`text_encoder_int8.mnn`, `fm_decoder_int8.mnn`, `vocoder_backbone.mnn`),
  * downloaded from `Bbkblo/DhVaani-0.5-MNN`.
  *
@@ -92,7 +92,7 @@ class MnnEngine(
     }
 
     companion object {
-        private const val TAG = "DhVaani.Mnn"
+        private const val TAG = "Swara.Mnn"
 
         /** Quick check used by the UI before offering / loading a model. */
         fun isRuntimeAvailable(): Boolean = MnnNative.available()

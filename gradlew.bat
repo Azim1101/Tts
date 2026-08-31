@@ -1,5 +1,5 @@
 @echo off
-rem Thin Gradle launcher for DhVaani (see gradlew for details).
+rem Thin Gradle launcher for Swara (see gradlew for details).
 setlocal
 
 if defined GRADLE_HOME (

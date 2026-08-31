@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">DhVaani</string>
+    <string name="app_name">Swara</string>
 
     <string name="section_reference">1. Reference voice</string>
 
@@ -27,7 +27,7 @@
     <string name="status_loading_models">Loading models…</string>
     <string name="status_synthesizing">Synthesizing… step %1$d/%2$d</string>
     <string name="status_done">Done in %1$s (RTF %2$s)</string>
-    <string name="status_saved">Saved to Music/DhVaani</string>
+    <string name="status_saved">Saved to Music/Swara</string>
 
     <string name="btn_download_models">📥 Download models (first launch)</string>
     <string name="status_downloading">Downloading models… %1$d/%2$d (%3$s) %4$d%%</string>
@@ -43,5 +43,5 @@
     <string name="err_runtime">Error: %1$s</string>
 
     <string name="consent_notice">⚠️ ETHICS NOTICE — Only use this tool to clone a voice you own or have explicit permission to use. Cloning a person\'s voice without consent can enable impersonation and is against the law in many places. Output is labelled as synthesized. Use responsibly.</string>
-    <string name="made_synth">Synthesized by DhVaani (on-device, offline).</string>
+    <string name="made_synth">Synthesized by Swara (on-device, offline).</string>
 </resources>

@@ -31,7 +31,7 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher"
         android:supportsRtl="true"
-        android:theme="@style/Theme.DhVaani">
+        android:theme="@style/Theme.Swara">
 
         <activity
             android:name=".MainActivity"

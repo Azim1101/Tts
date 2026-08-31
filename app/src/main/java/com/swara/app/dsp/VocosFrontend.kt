@@ -1,4 +1,4 @@
-package com.dhvaani.app.dsp
+package com.swara.app.dsp
 
 import kotlin.math.ln
 import kotlin.math.roundToInt

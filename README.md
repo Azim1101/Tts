@@ -1,4 +1,4 @@
-# DhVaani — Android Hindi Voice Cloner (Fully Offline)
+# Swara — Android Hindi Voice Cloner (Fully Offline)
 
 An on-device, zero-shot **voice cloning** + **text-to-speech** app for Android,
 in a Hindi (English-fallback) UI. You record or import a reference voice ~3–8 s,
@@ -16,12 +16,12 @@ vocoder. **Apache-2.0.**
 | Path | Purpose |
 |---|---|
 | `app/` | Android app (Kotlin, Material3, ViewBinding) |
-| `app/src/main/java/com/dhvaani/app/dsp/` | Pure-Kotlin DSP: windowed-sinc resampler, log-mel frontend, ISTFT vocoder, RMS norm |
-| `app/src/main/java/com/dhvaani/app/model/` | Model catalog / per-model Hugging Face download specs |
-| `app/src/main/java/com/dhvaani/app/onnx/` | `ModelEngine` interface + `MnnEngine` + model manager/downloader |
+| `app/src/main/java/com/swara/app/dsp/` | Pure-Kotlin DSP: windowed-sinc resampler, log-mel frontend, ISTFT vocoder, RMS norm |
+| `app/src/main/java/com/swara/app/model/` | Model catalog / per-model Hugging Face download specs |
+| `app/src/main/java/com/swara/app/onnx/` | `ModelEngine` interface + `MnnEngine` + model manager/downloader |
 | `app/src/main/java/com/taobao/android/mnn/` | MNN Android Java bindings (`MNNNetInstance`, `MNNNetNative`, `MNNForwardType`) |
-| `app/src/main/java/com/dhvaani/app/tts/` | Tokenizer + synthesis pipeline (flow-matching Euler sampler) |
-| `app/src/main/java/com/dhvaani/app/audio/` | AudioRecord recorder, MediaCodec importer, AudioTrack player, WAV/MediaStore saver |
+| `app/src/main/java/com/swara/app/tts/` | Tokenizer + synthesis pipeline (flow-matching Euler sampler) |
+| `app/src/main/java/com/swara/app/audio/` | AudioRecord recorder, MediaCodec importer, AudioTrack player, WAV/MediaStore saver |
 | `scripts/download_models.sh` | Optional bundled MNN model fetch, convert `.npz` → `.bin` |
 | `scripts/setup_mnn_runtime.sh` | Fetch the MNN Android runtime (`libMNN.so` + `libmnncore.so`) — required |
 | `scripts/make_assets.py` | Numpy → little-endian `.bin` converter |
@@ -55,6 +55,13 @@ model.json                            MNN config
 (`MNNNetInstance`) run them on CPU (arm64) through `libmnncore.so`. The Vocos
 `vocoder_backbone.mnn` only encodes the ConvNeXt; the cheap linear head and the
 overlap-add ISTFT are done in pure Kotlin (no numpy / torch in the app).
+
+> **arm64-only:** this APK ships **only** `arm64-v8a` native libs (see
+> `abiFilters` in `app/build.gradle.kts`). It must run on a real arm64 Android
+> phone — not an x86_64 emulator. `scripts/setup_mnn_runtime.sh` copies **only**
+> the arm64-v8a `.so` files from the MNN package so the 32-bit `armeabi-v7a`
+> libs never overwrite the 64-bit ones (a past bug that caused
+> `MNN_RUNTIME_MISSING` on launch even on real phones).
 
 ---
 
@@ -92,11 +99,11 @@ weights (the app downloads its MNN model on first launch, keeping the APK small)
 and uploads `app-debug.apk` as a downloadable **artifact**.
 
 ```bash
-# push the branch; open Actions -> "Build DhVaani APK" -> Run workflow
+# push the branch; open Actions -> "Build Swara APK" -> Run workflow
 git push origin arena/01a05801-tts
 ```
 
-The APK is attached to the run as `dhvaani-debug-apk`. No Android Studio or SDK
+The APK is attached to the run as `swara-debug-apk`. No Android Studio or SDK
 install is needed on your machine.
 
 ### Publishing a Release (permanent download URL)
@@ -105,7 +112,7 @@ Push a version tag and GitHub builds the APK **and** attaches it to a GitHub
 Release with a permanent `releases/latest` URL:
 
 ```bash
-git tag v1.4 && git push origin v1.4
+git tag v2.0 && git push origin v2.0
 ```
 
 Latest release: <https://github.com/Azim1101/Tts/releases/latest>
@@ -119,7 +126,7 @@ Latest release: <https://github.com/Azim1101/Tts/releases/latest>
 2. Confirm the **reference transcript** (what the recording says).
 3. Type your **target Indic text**.
 4. Tap **✨ Synthesize** — progress shows `step x/N` with RTF + time.
-5. **▶ Play result**, then **💾 Save** to MediaStore under `Music/DhVaani`.
+5. **▶ Play result**, then **💾 Save** to MediaStore under `Music/Swara`.
 
 On **first launch** the app downloads the MNN model graphs + feature files from
 Hugging Face into its private storage, converting the `.npz` features to `.bin`
@@ -171,7 +178,7 @@ a progress bar report the status. After that it works fully offline.
 ## Ethics / consent
 
 Voice cloning is sensitive. The app shows a prominent consent + anti-impersonation
-notice and labels output as **"Synthesized by DhVaani"**. **Only clone a voice you
+notice and labels output as **"Synthesized by Swara"**. **Only clone a voice you
 own or have explicit permission to use.** Cloning someone's voice without consent
 can enable impersonation and is illegal in many jurisdictions.
 

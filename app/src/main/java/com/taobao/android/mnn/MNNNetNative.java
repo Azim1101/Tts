@@ -23,7 +23,7 @@ public class MNNNetNative {
         try {
             System.loadLibrary(name);
         } catch (Throwable ce) {
-            Log.w("DhVaani.Mnn", "load " + name + " failed: " + ce.getMessage());
+            Log.w("Swara.Mnn", "load " + name + " failed: " + ce.getMessage());
         }
     }
 

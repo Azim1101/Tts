@@ -8,7 +8,7 @@ import android.util.Log;
  * `libmnncore.so` JNI implementation links cleanly.
  */
 public class MNNNetInstance {
-    private static final String TAG = "DhVaani.Mnn";
+    private static final String TAG = "Swara.Mnn";
 
     public static MNNNetInstance createFromFile(String fileName) {
         long instance = MNNNetNative.nativeCreateNetFromFile(fileName);

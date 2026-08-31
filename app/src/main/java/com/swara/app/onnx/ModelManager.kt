@@ -1,11 +1,11 @@
-package com.dhvaani.app.onnx
+package com.swara.app.onnx
 
 import android.content.Context
 import android.content.res.AssetManager
 import android.util.Log
-import com.dhvaani.app.dsp.DspConstants
-import com.dhvaani.app.model.ModelSpec
-import com.dhvaani.app.tts.Tokenizer
+import com.swara.app.dsp.DspConstants
+import com.swara.app.model.ModelSpec
+import com.swara.app.tts.Tokenizer
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.FileInputStream
@@ -156,6 +156,6 @@ class ModelManager(private val context: Context) {
     }
 
     private companion object {
-        private const val TAG = "DhVaani.Model"
+        private const val TAG = "Swara.Model"
     }
 }

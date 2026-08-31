@@ -1,4 +1,4 @@
-package com.dhvaani.app.dsp
+package com.swara.app.dsp
 
 /**
  * All DSP constants shared by the frontend (log-mel), the flow-matching

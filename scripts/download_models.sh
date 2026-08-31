@@ -80,7 +80,7 @@ def ensure(name, minbytes):
             r = run(["curl", "-sSL", "--retry", "5", "--retry-delay", "2",
                      "--retry-all-errors", "--connect-timeout", "60",
                      "--max-time", "1800",
-                     "-A", "DhVaani-build/0.8",
+                     "-A", "Swara-build/2.0",
                      "-o", os.path.join(out_dir, name),
                      f"https://huggingface.co/{REPO}/resolve/main/{name}"])
             if r.returncode != 0:

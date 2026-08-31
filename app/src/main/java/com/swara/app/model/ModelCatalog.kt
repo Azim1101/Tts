@@ -1,6 +1,6 @@
-package com.dhvaani.app.model
+package com.swara.app.model
 
-import com.dhvaani.app.dsp.DspConstants
+import com.swara.app.dsp.DspConstants
 
 /** One downloadable artifact inside a Hugging Face model repo. */
 data class ModelFileSpec(

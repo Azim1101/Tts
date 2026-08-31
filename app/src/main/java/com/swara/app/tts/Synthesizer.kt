@@ -1,12 +1,12 @@
-package com.dhvaani.app.tts
+package com.swara.app.tts
 
-import com.dhvaani.app.dsp.DspConstants
-import com.dhvaani.app.dsp.RmsNormalizer
-import com.dhvaani.app.dsp.RmsResult
-import com.dhvaani.app.dsp.VocosFrontend
-import com.dhvaani.app.dsp.VocosVocoder
-import com.dhvaani.app.dsp.WindowedSincResampler
-import com.dhvaani.app.onnx.ModelEngine
+import com.swara.app.dsp.DspConstants
+import com.swara.app.dsp.RmsNormalizer
+import com.swara.app.dsp.RmsResult
+import com.swara.app.dsp.VocosFrontend
+import com.swara.app.dsp.VocosVocoder
+import com.swara.app.dsp.WindowedSincResampler
+import com.swara.app.onnx.ModelEngine
 import kotlin.math.ln
 import kotlin.math.cos
 import kotlin.math.sin

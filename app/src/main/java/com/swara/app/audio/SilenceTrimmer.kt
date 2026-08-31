@@ -1,4 +1,4 @@
-package com.dhvaani.app.audio
+package com.swara.app.audio
 
 import kotlin.math.abs
 import kotlin.math.max
@@ -10,7 +10,7 @@ import kotlin.math.sqrt
  * — the algorithms are time-domain and don't care about SR).
  *
  * Used as a pre-processing step on the **reference voice** before it is fed
- * into the DhVaani prompt encoder. Without trimming, a 9 s WAV that contains
+ * into the Swara prompt encoder. Without trimming, a 9 s WAV that contains
  * 1 s of speech + 4 s of silence + 4 s of speech wastes 8 s of prompt budget
  * on noise and degrades the cloned voice (the model tries to "clone" the
  * silence too).

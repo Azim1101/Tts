@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">ध्वनि</string>
+    <string name="app_name">स्वर</string>
 
     <string name="section_reference">1. संदर्भ आवाज़</string>
 
@@ -28,7 +28,7 @@
     <string name="status_loading_models">मॉडल लोड हो रहे हैं…</string>
     <string name="status_synthesizing">संश्लेषण… चरण %1$d/%2$d</string>
     <string name="status_done">पूर्ण: %1$s (RTF %2$s)</string>
-    <string name="status_saved">Music/DhVaani में सहेजा गया</string>
+    <string name="status_saved">Music/Swara में सहेजा गया</string>
 
     <string name="btn_download_models">📥 मॉडल डाउनलोड करें (पहली बार)</string>
     <string name="status_downloading">मॉडल डाउनलोड हो रहे हैं… %1$d/%2$d (%3$s) %4$d%%</string>

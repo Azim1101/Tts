@@ -1,4 +1,4 @@
-name: Build DhVaani APK
+name: Build Swara APK
 
 # Build the debug APK on push / PR / manual trigger using a single
 # ubuntu-latest runner with JDK 17 + Android SDK 34 + Gradle 8.7.
@@ -16,7 +16,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: dhvaani-build-${{ github.ref }}
+  group: swara-build-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -109,7 +109,7 @@ jobs:
       - name: Upload APK as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: dhvaani-debug-apk
+          name: swara-debug-apk
           path: app/build/outputs/apk/**/*.apk
           if-no-files-found: error
 
@@ -134,7 +134,7 @@ jobs:
       - name: Download APK artifact
         uses: actions/download-artifact@v4
         with:
-          name: dhvaani-debug-apk
+          name: swara-debug-apk
           path: release-artifacts
 
       - name: List downloaded APK
@@ -143,11 +143,11 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: "DhVaani ${{ github.ref_name }}"
+          name: "Swara ${{ github.ref_name }}"
           tag_name: ${{ github.ref_name }}
           generate_release_notes: true
           body: |
-            **DhVaani MNN** — on-device, fully offline Hindi voice cloner (debug APK).
+            **Swara** — on-device, fully offline Hindi voice cloner (debug APK).
 
             ## Download
             - `${{ github.ref_name }}` — [app-debug.apk](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/app-debug.apk) (MNN runtime bundled, model downloaded on first launch, arm64-v8a)

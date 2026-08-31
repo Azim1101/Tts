@@ -1,4 +1,4 @@
-package com.dhvaani.app.audio
+package com.swara.app.audio
 
 import android.content.ContentValues
 import android.content.Context
@@ -11,17 +11,17 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/** Saves synthesized PCM into MediaStore under Music/DhVaani as a 16-bit WAV. */
+/** Saves synthesized PCM into MediaStore under Music/Swara as a 16-bit WAV. */
 object MediaStoreSaver {
 
     fun save(context: Context, samples: FloatArray, sampleRate: Int): Uri? {
-        val name = "DhVaani_" + SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date()) + ".wav"
+        val name = "Swara_" + SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date()) + ".wav"
         val values = ContentValues().apply {
             put(MediaStore.Audio.Media.DISPLAY_NAME, name)
             put(MediaStore.Audio.Media.MIME_TYPE, "audio/wav")
             put(MediaStore.Audio.Media.TITLE, name.substringBeforeLast('.'))
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                put(MediaStore.Audio.Media.RELATIVE_PATH, "Music/DhVaani")
+                put(MediaStore.Audio.Media.RELATIVE_PATH, "Music/Swara")
                 put(MediaStore.Audio.Media.IS_PENDING, 1)
             }
         }

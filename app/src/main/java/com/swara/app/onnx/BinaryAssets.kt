@@ -1,6 +1,6 @@
-package com.dhvaani.app.onnx
+package com.swara.app.onnx
 
-import com.dhvaani.app.dsp.DspConstants
+import com.swara.app.dsp.DspConstants
 import java.io.InputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder

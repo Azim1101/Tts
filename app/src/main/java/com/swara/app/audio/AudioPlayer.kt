@@ -1,4 +1,4 @@
-package com.dhvaani.app.audio
+package com.swara.app.audio
 
 import android.media.AudioAttributes
 import android.media.AudioFormat

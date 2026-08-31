@@ -1,4 +1,4 @@
-package com.dhvaani.app
+package com.swara.app
 
 import android.Manifest
 import android.content.pm.PackageManager
@@ -13,20 +13,20 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
-import com.dhvaani.app.audio.AudioImporter
-import com.dhvaani.app.audio.AudioPlayer
-import com.dhvaani.app.audio.AudioRecorder
-import com.dhvaani.app.audio.ImportedAudio
-import com.dhvaani.app.audio.MediaStoreSaver
-import com.dhvaani.app.databinding.ActivityMainBinding
-import com.dhvaani.app.dsp.VocosFrontend
-import com.dhvaani.app.dsp.VocosVocoder
-import com.dhvaani.app.model.ModelCatalog
-import com.dhvaani.app.model.ModelSpec
-import com.dhvaani.app.onnx.ModelEngine
-import com.dhvaani.app.onnx.ModelManager
-import com.dhvaani.app.onnx.MnnEngine
-import com.dhvaani.app.tts.Synthesizer
+import com.swara.app.audio.AudioImporter
+import com.swara.app.audio.AudioPlayer
+import com.swara.app.audio.AudioRecorder
+import com.swara.app.audio.ImportedAudio
+import com.swara.app.audio.MediaStoreSaver
+import com.swara.app.databinding.ActivityMainBinding
+import com.swara.app.dsp.VocosFrontend
+import com.swara.app.dsp.VocosVocoder
+import com.swara.app.model.ModelCatalog
+import com.swara.app.model.ModelSpec
+import com.swara.app.onnx.ModelEngine
+import com.swara.app.onnx.ModelManager
+import com.swara.app.onnx.MnnEngine
+import com.swara.app.tts.Synthesizer
 import java.util.concurrent.Executors
 
 class MainActivity : AppCompatActivity() {
@@ -118,7 +118,7 @@ class MainActivity : AppCompatActivity() {
         binding.btnPlayResult.setOnClickListener {
             val r = result
             if (r == null) { toast(getString(R.string.err_empty_target)); return@setOnClickListener }
-            player.play(r, com.dhvaani.app.dsp.DspConstants.SR)
+            player.play(r, com.swara.app.dsp.DspConstants.SR)
         }
 
         binding.btnSave.setOnClickListener { saveResult() }
@@ -256,7 +256,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 val elapsed = SystemClock.elapsedRealtime() - start
                 val seconds = elapsed / 1000f
-                val audioSecs = audio.size.toFloat() / com.dhvaani.app.dsp.DspConstants.SR
+                val audioSecs = audio.size.toFloat() / com.swara.app.dsp.DspConstants.SR
                 val rtf = if (audioSecs > 0f) seconds / audioSecs else 0f
                 runOnUiThread {
                     result = audio
@@ -295,7 +295,7 @@ class MainActivity : AppCompatActivity() {
     private fun saveResult() {
         val r = result ?: return
         executor.execute {
-            val uri = MediaStoreSaver.save(this, r, com.dhvaani.app.dsp.DspConstants.SR)
+            val uri = MediaStoreSaver.save(this, r, com.swara.app.dsp.DspConstants.SR)
             runOnUiThread { status(getString(R.string.status_saved)); toast(getString(R.string.status_saved)) }
         }
     }
@@ -333,7 +333,7 @@ class MainActivity : AppCompatActivity() {
             }
             built = MnnEngine(models.encoderPath, models.fmDecoderPath, models.vocoderBackbonePath)
         } catch (e: Throwable) {
-            Log.e("DhVaani", "loadModels(${spec.id}) failed", e)
+            Log.e("Swara", "loadModels(${spec.id}) failed", e)
             runOnUiThread {
                 binding.btnSynthesize.isEnabled = false
                 binding.btnDownloadModels.visibility = View.VISIBLE
@@ -353,7 +353,7 @@ class MainActivity : AppCompatActivity() {
             val vocoder = VocosVocoder(readyEngine, vocosHead)
             syn = Synthesizer(readyEngine, tokenizer, frontend, vocoder)
         } catch (e: Throwable) {
-            Log.e("DhVaani", "loadModels(${spec.id}) feature load failed", e)
+            Log.e("Swara", "loadModels(${spec.id}) feature load failed", e)
             runCatching { readyEngine.close() }
             runOnUiThread {
                 binding.btnSynthesize.isEnabled = false
@@ -393,7 +393,7 @@ class MainActivity : AppCompatActivity() {
             val modelsDir = java.io.File(filesDir, "models")
             if (!modelsDir.exists()) modelsDir.mkdirs()
             val loaded = try {
-                com.dhvaani.app.onnx.ModelDownloader.downloadMissing(modelsDir, spec) { idx, count, name, frac ->
+                com.swara.app.onnx.ModelDownloader.downloadMissing(modelsDir, spec) { idx, count, name, frac ->
                     val line = getString(R.string.status_downloading, idx, count, "$name (${spec.title})", (frac * 100).toInt())
                     runOnUiThread {
                         status(line)
@@ -401,7 +401,7 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
             } catch (e: Throwable) {
-                Log.e("DhVaani.Download", "downloadMissing threw", e)
+                Log.e("Swara.Download", "downloadMissing threw", e)
                 false
             }
             runOnUiThread {

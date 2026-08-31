@@ -1,4 +1,4 @@
-package com.dhvaani.app.onnx
+package com.swara.app.onnx
 
 import java.nio.ByteBuffer
 import java.nio.ByteOrder

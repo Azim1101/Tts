@@ -1,9 +1,9 @@
-package com.dhvaani.app.onnx
+package com.swara.app.onnx
 
 /**
- * Minimal graph interface needed by the DhVaani synthesis pipeline.
+ * Minimal graph interface needed by the Swara synthesis pipeline.
  *
- * [MnnEngine] implements it so [com.dhvaani.app.tts.Synthesizer] stays
+ * [MnnEngine] implements it so [com.swara.app.tts.Synthesizer] stays
  * engine-agnostic. All methods are called from the single background executor
  * owned by MainActivity.
  */

@@ -4,15 +4,15 @@ plugins {
 }
 
 android {
-    namespace = "com.dhvaani.app"
+    namespace = "com.swara.app"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.dhvaani.app"
+        applicationId = "com.swara.app"
         minSdk = 24
         targetSdk = 34
-        versionCode = 9
-        versionName = "1.4"
+        versionCode = 10
+        versionName = "2.0"
         // Only ship the 64-bit ARM ABI that real phones run. This drops the stale
         // x86_64/armeabi-v7a native libs, shrinking the APK and ensuring the
         // optimised arm64 XNNPACK/NNAPI .so is the one used.
