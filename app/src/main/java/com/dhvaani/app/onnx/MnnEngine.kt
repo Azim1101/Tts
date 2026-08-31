@@ -196,12 +196,12 @@ private object MnnNative {
     fun ensureAvailable() {
         if (initialized) {
             if (ok) return
-            throw IllegalStateException(describe(), lastError)
+            throw missingError()
         }
         synchronized(this) {
             if (initialized) {
                 if (ok) return
-                throw IllegalStateException(describe(), lastError)
+                throw missingError()
             }
             try {
                 // Force MNNNetNative's static block to run (loads libMNN.so,
@@ -213,8 +213,17 @@ private object MnnNative {
                 initialized = true
                 ok = false
                 lastError = t
-                throw IllegalStateException(describe(), t)
+                throw missingError()
             }
+        }
+    }
+
+    private fun missingError(): IllegalStateException {
+        val cause = lastError
+        return if (cause != null) {
+            IllegalStateException(describe(), cause)
+        } else {
+            IllegalStateException(describe())
         }
     }
 
