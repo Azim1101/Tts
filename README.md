@@ -93,7 +93,7 @@ and uploads `app-debug.apk` as a downloadable **artifact**.
 
 ```bash
 # push the branch; open Actions -> "Build DhVaani APK" -> Run workflow
-git push origin arena/01a04c12-tts
+git push origin arena/01a05801-tts
 ```
 
 The APK is attached to the run as `dhvaani-debug-apk`. No Android Studio or SDK
@@ -105,7 +105,7 @@ Push a version tag and GitHub builds the APK **and** attaches it to a GitHub
 Release with a permanent `releases/latest` URL:
 
 ```bash
-git tag v0.7.0 && git push origin v0.7.0
+git tag v1.2 && git push origin v1.2
 ```
 
 Latest release: <https://github.com/Azim1101/Tts/releases/latest>
