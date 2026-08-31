@@ -234,11 +234,16 @@ private object MnnNative {
             "unknown"
         }
         val cause = lastError
-        val detail = when {
-            cause == null -> ""
-            cause.message != null -> "; ${cause.message}"
-            cause.cause?.message != null -> "; ${cause.cause.message}"
-            else -> "; ${cause.javaClass.simpleName}"
+        val detail = if (cause == null) {
+            ""
+        } else {
+            val msg = cause.message
+            val causeMsg = cause.cause?.message
+            when {
+                !msg.isNullOrEmpty() -> "; $msg"
+                !causeMsg.isNullOrEmpty() -> "; $causeMsg"
+                else -> "; ${cause.javaClass.simpleName}"
+            }
         }
         return "$MSG_MISSING (device abi: $abis$detail)"
     }
