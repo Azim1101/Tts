@@ -25,6 +25,8 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout
@@ -68,6 +70,22 @@ jobs:
           echo "gradle exit=${PIPESTATUS[0]}"
           echo "--- APK locations ---"
           find app/build/outputs -type f -name '*.apk' 2>/dev/null || echo "(no apk found)"
+
+      # TEMP DIAGNOSTIC: publish build.log to a ci-diag branch on failure so it
+      # can be read back via the API. Remove after debugging.
+      - name: TEMP publish build.log on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          git config user.name "ci-diag"
+          git config user.email "ci-diag@example.com"
+          git checkout -b ci-diag || git checkout ci-diag
+          git add build.log
+          git -c user.name="ci-diag" -c user.email="ci-diag@example.com" commit -m "ci-diag: build.log $(date -u +%s)" || true
+          git push -f origin ci-diag 2>&1 | tail -5 || true
+          echo "published to ci-diag branch"
 
       - name: Upload APK as artifact
         uses: actions/upload-artifact@v4
