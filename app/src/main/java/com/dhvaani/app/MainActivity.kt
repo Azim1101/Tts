@@ -17,12 +17,10 @@ import com.dhvaani.app.audio.AudioRecorder
 import com.dhvaani.app.audio.ImportedAudio
 import com.dhvaani.app.audio.MediaStoreSaver
 import com.dhvaani.app.databinding.ActivityMainBinding
-import com.dhvaani.app.dsp.VocosFrontend
-import com.dhvaani.app.dsp.VocosVocoder
-import com.dhvaani.app.onnx.ModelManager
-import com.dhvaani.app.onnx.OnnxEngine
-import com.dhvaani.app.tts.Synthesizer
+import com.dhvaani.app.model.ModelDownloader
+import java.io.File
 import java.util.concurrent.Executors
+import zone.dhvaani.tts.DhVaani
 
 class MainActivity : AppCompatActivity() {
 
@@ -38,21 +36,10 @@ class MainActivity : AppCompatActivity() {
     private var busy = false
     @Volatile private var downloading = false
 
-    private var engine: OnnxEngine? = null
-    private var synthesizer: Synthesizer? = null
-    private var modelManager: ModelManager? = null
-
-    // Hold the current Toast so a new one cancels the previous. This prevents the
-    // stale "Model files missing..." toast from lingering on screen after the
-    // auto-download completes and the status becomes "Ready" again.
+    private var tts: DhVaani? = null
     private var currentToast: Toast? = null
 
-    // ------------------------------------------------------------------
-    // Synthesis parameters — hard-coded in v0.7.5 (the steps/guidance/speed
-    // sliders were removed for the simpler one-tap-clone UI). These match
-    // the values the README and the original `dhvaani_torchfree.py`
-    // reference script treat as the "fast preset".
-    // ------------------------------------------------------------------
+    // Synthesis parameters (fast, balanced preset)
     private val steps: Int = 8
     private val guidance: Float = 1.0f
     private val speed: Float = 1.0f
@@ -81,10 +68,6 @@ class MainActivity : AppCompatActivity() {
         executor.execute { loadModels() }
     }
 
-    // ------------------------------------------------------------------
-    // UI setup
-    // ------------------------------------------------------------------
-
     private fun setupListeners() {
         binding.btnRecord.setOnClickListener { toggleRecord() }
 
@@ -105,7 +88,7 @@ class MainActivity : AppCompatActivity() {
         binding.btnPlayResult.setOnClickListener {
             val r = result
             if (r == null) { toast(getString(R.string.err_empty_target)); return@setOnClickListener }
-            player.play(r, com.dhvaani.app.dsp.DspConstants.SR)
+            player.play(r, DhVaani.SAMPLE_RATE)
         }
 
         binding.btnSave.setOnClickListener { saveResult() }
@@ -115,10 +98,10 @@ class MainActivity : AppCompatActivity() {
     // Recording
     // ------------------------------------------------------------------
     private fun toggleRecord() {
-        if (busy) { toast(getString(R.string.status_synthesizing)); return }
+        if (busy) { toast(getString(R.string.status_synthesizing, 0, steps)); return }
         if (recorder.isRecording) {
             val samples = recorder.stop()
-            if (samples.size > 0) {
+            if (samples.isNotEmpty()) {
                 reference = samples
                 refSampleRate = 44100
                 binding.btnRecord.text = getString(R.string.btn_record)
@@ -176,11 +159,8 @@ class MainActivity : AppCompatActivity() {
         val target = binding.targetText.text?.toString() ?: ""
         if (target.isBlank()) { toast(getString(R.string.err_empty_target)); return }
 
-        val syn = synthesizer
-        if (syn == null) {
-            // Defensive: the button should be disabled while models are missing,
-            // but if we somehow got here, disable it now and tell the user how
-            // to recover — instead of leaving a misleading persistent toast.
+        val engine = tts
+        if (engine == null || !engine.isReady) {
             binding.btnSynthesize.isEnabled = false
             binding.btnDownloadModels.visibility = View.VISIBLE
             binding.btnDownloadModels.isEnabled = true
@@ -198,23 +178,44 @@ class MainActivity : AppCompatActivity() {
 
         executor.execute {
             try {
-                val audio = syn.synthesize(
-                    reference = ref,
-                    refSampleRate = refSampleRate,
-                    refTranscript = transcript,
-                    targetText = target,
-                    steps = steps,
-                    guidance = guidance,
-                    speed = speed
-                ) { done, total ->
-                    runOnUiThread {
-                        binding.progress.progress = done
-                        status(getString(R.string.status_synthesizing, done, total))
+                // Set reference voice
+                if (!engine.setPrompt(ref, refSampleRate, transcript)) {
+                    val err = engine.lastError()
+                    val msg = when {
+                        err.contains("no tokens", ignoreCase = true) -> getString(R.string.err_no_tokens)
+                        err.contains("empty", ignoreCase = true) -> getString(R.string.err_empty_transcript)
+                        else -> getString(R.string.err_runtime, err)
                     }
+                    runOnUiThread { fail(msg) }
+                    return@execute
                 }
+
+                engine.configure(numStep = steps, guidanceScale = guidance, speed = speed, seed = 666)
+
+                val audio = engine.synthesize(target) { stage, cur, total ->
+                    runOnUiThread {
+                        if (stage == "fm_decoder") {
+                            binding.progress.progress = cur
+                            status(getString(R.string.status_synthesizing, cur, total))
+                        }
+                    }
+                    true
+                }
+
+                if (audio == null) {
+                    val err = engine.lastError()
+                    val msg = when {
+                        err.contains("no tokens", ignoreCase = true) -> getString(R.string.err_no_tokens)
+                        err.contains("prompt longer", ignoreCase = true) -> getString(R.string.err_ref_longer)
+                        else -> getString(R.string.err_runtime, err)
+                    }
+                    runOnUiThread { fail(msg) }
+                    return@execute
+                }
+
                 val elapsed = SystemClock.elapsedRealtime() - start
                 val seconds = elapsed / 1000f
-                val audioSecs = audio.size.toFloat() / com.dhvaani.app.dsp.DspConstants.SR
+                val audioSecs = audio.size.toFloat() / DhVaani.SAMPLE_RATE
                 val rtf = if (audioSecs > 0f) seconds / audioSecs else 0f
                 runOnUiThread {
                     result = audio
@@ -225,14 +226,6 @@ class MainActivity : AppCompatActivity() {
                     binding.progress.visibility = View.GONE
                     status(getString(R.string.status_done, "%.2fs".format(seconds), "%.2f".format(rtf)))
                 }
-            } catch (e: IllegalArgumentException) {
-                val msg = when (e.message) {
-                    "NO_TOKENS" -> getString(R.string.err_no_tokens)
-                    "EMPTY_TRANSCRIPT" -> getString(R.string.err_empty_transcript)
-                    "REF_LONGER" -> getString(R.string.err_ref_longer)
-                    else -> getString(R.string.err_runtime, e.message ?: "unknown")
-                }
-                runOnUiThread { fail(msg) }
             } catch (e: Exception) {
                 runOnUiThread { fail(getString(R.string.err_runtime, e.message ?: "unknown")) }
             }
@@ -242,11 +235,7 @@ class MainActivity : AppCompatActivity() {
     private fun fail(msg: String) {
         busy = false
         binding.progress.visibility = View.GONE
-        // Only re-enable Synthesize when the synthesizer is actually ready. If
-        // it's still null (e.g. models failed to load earlier), the user MUST
-        // not be able to tap the button just to see another "Model files
-        // missing" toast — they should re-tap "Download models" instead.
-        binding.btnSynthesize.isEnabled = synthesizer != null
+        binding.btnSynthesize.isEnabled = (tts?.isReady == true)
         status(msg)
         toast(msg)
     }
@@ -257,8 +246,15 @@ class MainActivity : AppCompatActivity() {
     private fun saveResult() {
         val r = result ?: return
         executor.execute {
-            val uri = MediaStoreSaver.save(this, r, com.dhvaani.app.dsp.DspConstants.SR)
-            runOnUiThread { status(getString(R.string.status_saved)); toast(getString(R.string.status_saved)) }
+            val uri = MediaStoreSaver.save(this, r, DhVaani.SAMPLE_RATE)
+            runOnUiThread {
+                if (uri != null) {
+                    status(getString(R.string.status_saved))
+                    toast(getString(R.string.status_saved))
+                } else {
+                    toast(getString(R.string.err_runtime, "Save failed"))
+                }
+            }
         }
     }
 
@@ -267,37 +263,42 @@ class MainActivity : AppCompatActivity() {
     // ------------------------------------------------------------------
     private fun loadModels() {
         try {
-            val mgr = ModelManager(this)
-            modelManager = mgr
-            val models = mgr.prepare()
-            if (!models.ready) {
-                runOnUiThread {
-                    status(models.message)
-                    binding.btnDownloadModels.visibility = View.VISIBLE
-                    binding.btnSynthesize.isEnabled = false
+            val modelDir = File(filesDir, "dhvaani")
+            val allPresentInDir = DhVaani.REQUIRED_FILES.all { File(modelDir, it).length() > 0 }
+
+            var engine: DhVaani? = null
+            if (allPresentInDir) {
+                engine = DhVaani.fromDirectory(modelDir)
+            } else {
+                // Try assets/dhvaani/ extraction
+                val hasAssets = runCatching {
+                    assets.open("dhvaani/tokens.txt").close()
+                    true
+                }.getOrDefault(false)
+
+                if (hasAssets) {
+                    engine = DhVaani.fromAssets(this, "dhvaani")
                 }
-                // Auto-start the download so the user usually doesn't need to tap.
-                downloadModels()
+            }
+
+            if (engine != null && engine.isReady) {
+                tts = engine
+                runOnUiThread {
+                    status(getString(R.string.status_ready))
+                    binding.btnDownloadModels.visibility = View.GONE
+                    binding.btnSynthesize.isEnabled = true
+                }
                 return
             }
-            val eng = OnnxEngine(models.encoderPath, models.fmDecoderPath, models.vocoderBackbonePath)
-            val tokenizer = mgr.loadTokenizer()
-            val melFb = mgr.loadMelFb()
-            val vocosHead = mgr.loadVocosHead()
-            val frontend = VocosFrontend(melFb.fb, melFb.window, melFb.nFft, melFb.hop, melFb.nMels)
-            val vocoder = VocosVocoder(eng, vocosHead)
-            val syn = Synthesizer(eng, tokenizer, frontend, vocoder)
+
+            // If not found, trigger download
             runOnUiThread {
-                engine = eng
-                synthesizer = syn
-                status(getString(R.string.status_ready))
-                binding.btnDownloadModels.visibility = View.GONE
-                binding.btnSynthesize.isEnabled = true
+                status(getString(R.string.err_models_missing))
+                binding.btnDownloadModels.visibility = View.VISIBLE
+                binding.btnSynthesize.isEnabled = false
             }
+            downloadModels()
         } catch (e: Throwable) {
-            // Any exception during model load means the synthesizer is in an
-            // inconsistent state. Show the error, KEEP Synthesize disabled, and
-            // bring the "Download models" button back so the user can recover.
             Log.e("DhVaani", "loadModels failed", e)
             runOnUiThread {
                 binding.btnSynthesize.isEnabled = false
@@ -309,10 +310,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun downloadModels() {
-        val mgr = modelManager ?: return
         if (downloading) return
         downloading = true
-        // UI setup on the main thread (this can be called from the bg executor).
+        val modelDir = File(filesDir, "dhvaani")
+
         runOnUiThread {
             binding.btnDownloadModels.isEnabled = false
             binding.progress.visibility = View.VISIBLE
@@ -321,23 +322,8 @@ class MainActivity : AppCompatActivity() {
         }
 
         executor.execute {
-            // The v0.5.0-style download path: we don't touch the possibly-null
-            // getters in ModelManager. We ask the downloader for the canonical
-            // list of files it knows about and let it handle ordering.
-            val needed = listOf(
-                com.dhvaani.app.dsp.DspConstants.ENCODER_INT8,
-                com.dhvaani.app.dsp.DspConstants.FM_DECODER_INT8,
-                com.dhvaani.app.dsp.DspConstants.VOCODER_BACKBONE,
-                "mel_fb.npz",
-                "vocos_head.npz",
-                com.dhvaani.app.dsp.DspConstants.TOKENS_TXT
-            )
-            val modelsDir = java.io.File(filesDir, "models")
-            if (!modelsDir.exists()) modelsDir.mkdirs()
             val ok = try {
-                com.dhvaani.app.onnx.ModelDownloader.downloadMissing(
-                    modelsDir, needed
-                ) { idx, count, name, frac ->
+                ModelDownloader.downloadMissing(modelDir) { idx, count, name, frac ->
                     val line = getString(R.string.status_downloading, idx, count, name, (frac * 100).toInt())
                     runOnUiThread {
                         status(line)
@@ -354,7 +340,6 @@ class MainActivity : AppCompatActivity() {
                 if (ok) {
                     binding.btnDownloadModels.visibility = View.GONE
                     status(getString(R.string.status_download_done))
-                    // Re-attempt full model load (now ready).
                     loadModels()
                 } else {
                     binding.btnDownloadModels.isEnabled = true
@@ -364,21 +349,13 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // ------------------------------------------------------------------
     private fun status(s: String) {
         binding.statusLine.text = s
-        // When the status line gets a new authoritative message (e.g. "Ready."),
-        // dismiss any pending Toast so the user doesn't see a stale banner
-        // (e.g. an earlier "Model files missing…") coexisting with the new
-        // status. Toast is transient; statusLine is the source of truth.
         currentToast?.cancel()
         currentToast = null
     }
 
     private fun toast(s: String) {
-        // Cancel any previous toast so a later "ready" / status update doesn't
-        // leave a stale "Model files missing..." (or any other) notification on
-        // screen after the underlying state has already moved on.
         currentToast?.cancel()
         val t = Toast.makeText(this, s, Toast.LENGTH_LONG)
         currentToast = t
@@ -388,8 +365,10 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         recorder.stop()
+        player.stop()
         executor.shutdown()
-        try { engine?.close() } catch (_: Exception) {}
+        tts?.close()
+        tts = null
         currentToast?.cancel()
         currentToast = null
     }

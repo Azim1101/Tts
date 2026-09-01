@@ -1,13 +1,12 @@
-# DhVaani — Android Hindi Voice Cloner (Fully Offline)
+# DhVaani — Android Hindi Voice Cloner (MNN Backend, Fully Offline)
 
 An on-device, zero-shot **voice cloning** + **text-to-speech** app for Android,
 in a Hindi (English-fallback) UI. You record or import a reference voice ~3–8 s,
 type what it says, then type any Indic text — the app speaks it in the reference
 speaker's voice at 24 kHz. **No server, no audio ever leaves the device.**
 
-Built on a torch-free ONNX export of `ARTPARK-IISc/DhVaani-0.5` (a ZipVoice
-fine-tune, 27 Indic languages, zero-shot cloning) plus the `charactr/vocos-mel-24khz`
-vocoder. **Apache-2.0.**
+Built on the updated **DhVaani-0.5 MNN (v1.1)** model suite and Alibaba's **MNN 3.6.1**
+inference engine with native ARM NEON fp16 acceleration. **Apache-2.0.**
 
 ---
 
@@ -15,38 +14,44 @@ vocoder. **Apache-2.0.**
 
 | Path | Purpose |
 |---|---|
-| `app/` | Android app (Kotlin, Material3, ViewBinding) |
-| `app/src/main/java/com/dhvaani/app/dsp/` | Pure-Kotlin DSP: windowed-sinc resampler, log-mel frontend, ISTFT vocoder, RMS norm |
-| `app/src/main/java/com/dhvaani/app/onnx/` | ONNX session wrapper + model manager |
-| `app/src/main/java/com/dhvaani/app/tts/` | Tokenizer + synthesis pipeline (flow-matching Euler sampler) |
+| `app/` | Android application (Kotlin, Material3, ViewBinding) |
+| `dhvaani/` | Reusable TTS library module with native C++ engine + JNI bridge + Kotlin API |
+| `dhvaani/src/main/cpp/dhvaani.cpp` | High-performance C++ DSP: windowed-sinc resampler, log-mel STFT, flow matching, ISTFT vocoder |
+| `dhvaani/src/main/cpp/dhvaani_jni.cpp` | JNI bridge connecting Kotlin to C++ MNN Express Module |
+| `dhvaani/src/main/java/zone/dhvaani/tts/DhVaani.kt` | Clean Kotlin TTS API (`fromAssets`, `fromDirectory`, `setPrompt`, `synthesize`, `play`) |
+| `app/src/main/java/com/dhvaani/app/model/ModelDownloader.kt` | In-app streaming model downloader with retry & size verification |
 | `app/src/main/java/com/dhvaani/app/audio/` | AudioRecord recorder, MediaCodec importer, AudioTrack player, WAV/MediaStore saver |
-| `scripts/download_models.sh` | Fetch ONNX graphs + features, convert `.npz` → `.bin` |
-| `scripts/make_assets.py` | Numpy → little-endian `.bin` converter |
+| `scripts/fetch_mnn.sh` | Fetches MNN 3.6.1 prebuilt `.so` libraries and headers |
+| `scripts/download_models.sh` | Downloads DhVaani MNN graphs and `.bin` feature files |
 | `.github/workflows/build-apk.yml` | GitHub Actions CI: build the debug APK and upload it as an artifact |
 
-## Model assets (downloaded, not committed)
+---
 
-The 3 int8 ONNX graphs and small feature files come from
-`https://huggingface.co/Bbkblo/DhVaani-0.5-ONNX`:
+## Model assets
 
-```
-text_encoder_int8.onnx   (~6 MB)   chars + duration expand     -> text_condition [1,T,100]
-fm_decoder_int8.onnx     (~119 MB) flow-matching velocity (CFG) -> v [1,T,100]
-vocoder_backbone.onnx    (~50 MB)  Vocos ConvNeXt backbone      -> hidden [1,T,512]
-vocos_head.npz                        linear head + window
-mel_fb.npz                            HTK mel filterbank + window
-tokens.txt                            char->id vocab (1058)
-```
+The MNN graphs and feature files come from
+`https://huggingface.co/Bbkblo/DhVaani-0.5-MNN`:
 
-If the int8 files are absent the app automatically falls back to the fp32
-`text_encoder.onnx` / `fm_decoder.onnx` variants (`ModelManager`).
+| File | Role | Size |
+|---|---|---|
+| `text_encoder_int8.mnn` | text → `text_condition` | 5.8 MB |
+| `fm_decoder_int8.mnn` | flow-matching velocity `(t, x, cond) → v` | 119 MB |
+| `vocoder_backbone.mnn` | mels → hidden | 13 MB |
+| `mel_fb.bin` | mel filterbank + window (flat float32) | 205 KB |
+| `vocos_head.bin` | vocos output layer + window | 2.1 MB |
+| `tokens.txt` | vocabulary | 8 KB |
+| `model.json` | architecture config | 0.7 KB |
 
-## Backend note — why the 3 ONNX graphs are separate
+Total runtime asset footprint: **~140 MB**.
 
-`text_encoder` and `fm_decoder` are single nodes so onnxruntime can run them on
-CPU without a full PyTorch runtime. The Vocos `vocoder_backbone.onnx` only
-encodes the ConvNeXt; the cheap linear head and the overlap-add ISTFT are done in
-pure Kotlin (no numpy / torch in the app).
+---
+
+## Why MNN (v1.1)?
+
+1. **Numerically faithful INT8 weights:** Quantized directly from fp32 with asymmetric INT8 weight packing, achieving **+0.99997 correlation** with fp32 PyTorch reference.
+2. **Subgraphs via MNN Express:** Runs complex dynamic graphs through `MNN::Express::Module` with native C++ integration.
+3. **NEON / FP16 acceleration:** `arm64-v8a` runs with `-march=armv8.2-a+fp16+dotprod` for significantly lower latency and power consumption.
+4. **All-in-C++ DSP:** Mel filterbank, windowed-sinc resampler, radix-2 FFT, and overlap-add ISTFT run natively in C++ for maximum speed.
 
 ---
 
@@ -54,122 +59,84 @@ pure Kotlin (no numpy / torch in the app).
 
 ### Option A — Local (Android Studio or CLI)
 
-Requirements: **JDK 17**, **Android SDK 34** (`platforms;android-34`,
-`build-tools;34.0.0`), **Gradle 8.7**, `python3` + `numpy` (for asset conversion),
-and `curl`.
+Requirements: **JDK 17**, **Android SDK 34**, **NDK r26+ / r27**, **CMake 3.22.1**, **Gradle 8.7**, `python3`, and `curl`.
 
 ```bash
-# 1. Download the ONNX graphs + features, convert npz -> bin into app/src/main/assets
+# 1. Fetch MNN 3.6.1 prebuilts & headers
+bash scripts/fetch_mnn.sh
+
+# 2. Download MNN models into assets (optional for bundling into APK)
 bash scripts/download_models.sh
 
-# 2. Build (thin gradlew delegates to your Gradle 8.7)
+# 3. Build debug APK
 ./gradlew assembleDebug
-# or with a globally installed Gradle 8.7:
-gradle assembleDebug
 
-# APK at app/build/outputs/apk/debug/app-debug.apk
+# APK will be at: app/build/outputs/apk/debug/app-debug.apk
 ```
 
-### Option B — GitHub Actions (CI, no local Android SDK needed)
+### Option B — GitHub Actions (CI)
 
-Push to a branch (or run the workflow manually) and GitHub builds the APK on an
-`ubuntu-latest` runner with JDK 17, Android SDK 34, Gradle 8.7 — it downloads the
-models (with retry + min-byte-size check, since the 125 MB `fm_decoder` can
-truncate), converts the features, runs `assembleDebug`, and uploads
-`app-debug.apk` as a downloadable **artifact**.
-
-```bash
-# push the branch; open Actions -> "Build DhVaani APK" -> Run workflow
-git push origin arena/01a04c12-tts
-```
-
-The APK is attached to the run as `dhvaani-debug-apk`. No Android Studio or SDK
-install is needed on your machine.
-
-### Publishing a Release (permanent download URL)
-
-Push a version tag and GitHub builds the APK **and** attaches it to a GitHub
-Release with a permanent `releases/latest` URL:
-
-```bash
-git tag v0.7.0 && git push origin v0.7.0
-```
-
-Latest release: <https://github.com/Azim1101/Tts/releases/latest>
+Push to your repository branch and GitHub Actions will automatically:
+1. Set up Android SDK, NDK, and CMake
+2. Run `fetch_mnn.sh` and `download_models.sh`
+3. Build the debug APK with `gradle assembleDebug`
+4. Attach `app-debug.apk` as a downloadable **artifact**.
 
 ---
 
 ## Using the app
 
-1. **Record** 🔴 (AudioRecord, mono 44.1 kHz → auto-resample) or **Import** 📁
-   (MediaExtractor + MediaCodec: mp3/m4a/ogg/flac/wav → mono float).
+1. **Record** 🔴 (AudioRecord, mono 44.1 kHz → auto-resample to 24 kHz) or **Import** 📁 (MediaExtractor + MediaCodec: mp3/m4a/ogg/flac/wav → mono float).
 2. Confirm the **reference transcript** (what the recording says).
-3. Type your **target Indic text**.
-4. Optionally tune **steps** (8–32), **guidance** (0.5–3.0), **speed** (0.5–1.5).
-5. Tap **✨ Synthesize** — progress shows `step x/N` with RTF + time.
-6. **▶ Play result**, then **💾 Save** to MediaStore under `Music/DhVaani`.
+3. Type your **target Indic text** (Devanagari).
+4. Tap **✨ Synthesize** — progress bar shows steps in real-time.
+5. **▶ Play result**, then **💾 Save** to MediaStore under `Music/DhVaani`.
 
-On **first launch** the app downloads the model graphs + feature files itself
-(from the Apache-2.0 ARTPARK-IISc model repo) into its private storage, converting
-the `.npz` features to `.bin` on-device — no developer setup, no Python/NumPy. A
-**Download models** button and a progress bar report the status. After that it
-works fully offline.
+On **first launch**, if model assets are not bundled in the APK, the app downloads them directly to private app storage (`filesDir/dhvaani/`) and works fully offline thereafter.
 
 ---
 
-## Architecture / DSP notes
+## Kotlin Library API (`zone.dhvaani.tts.DhVaani`)
 
-- **Resampler:** windowed-sinc, Kaiser window (β≈12), normalised by the sum of taps —
-  matches `scipy.signal.resample_poly` to ~0.1% relative error.
-- **Log-mel (Vocos):** 1024 FFT / 256 hop / 100 mels, zero-pad N_FFT/2, periodic-Hann.
-- **Flow matching:** Euler, `t_shift = 0.5`, seeded noise (`seed = 666`), CFG baked into `fm_decoder`.
-- **Vocoder:** backbone (ONNX) → linear head → mag+phase → overlap-add ISTFT (pad='same').
-- Constants: `SR=24000`, `N_FFT=1024`, `HOP=256`, `N_MELS=100`, `FEAT_SCALE=0.1`, `TARGET_RMS=0.1`.
+```kotlin
+// 1. Initialize engine
+val tts = DhVaani.fromAssets(context, precision = DhVaani.Precision.LOW)
+check(tts.isReady) { tts.lastError() }
 
----
+// 2. Set reference voice
+val (pcm, sr) = DhVaani.readWav(File(filesDir, "prompt.wav"))
+tts.setPrompt(pcm, sr, "reference text spoken in prompt")
 
-## ⚠️ Honest limitations (please read before publishing)
+// 3. Configure parameters
+tts.configure(numStep = 8, guidanceScale = 1.0f, speed = 1.0f, seed = 666)
+tts.warmup()
 
-1. **APK ≈ 165 MB** (arm64-v8a only; includes the int8 models when built by the
-   CI script). It's beyond Play's single file limit, so for publishing use an
-   **App Bundle + asset packs**; the debug APK is arm64-v8a only (no x86_64
-   emulator support, add `x86_64` back for emulator testing). If the models are
-   bundled (CI builds) the app loads them straight away; from v0.7, if they're
-   ever missing it **downloads them on first launch** instead of failing.
-2. **Only Devanagari / Indic script renders well.** No Latin "Hinglish", digits,
-   abbreviations or foreign words (chars not in the vocab are dropped). No
-   language auto-detect or number normalisation.
-3. **Character-level, script-dependent tokenizer** (1058 chars).
-4. **Speed:** CPU + (where supported) NNAPI/XNNPACK execution providers. Default
-   flow-matching is 8 steps; XNNPACK vectorised ARM kernels give a solid speedup and
-   NNAPI offloads to GPU/DSP when supported (per-graph CPU fallback if not). Long text
-   is auto-split into sentence chunks. On a mid-range phone expect roughly 5–15×
-   real-time still — it will feel slow, but noticeably faster than the previous
-   20-step baseline.
-5. **Clone quality depends on the reference:** best with clean, single-speaker,
-   3–8 s audio. Noisy/quiet/reverb degrades. Quiet references get RMS-boosted
-   (which also amplifies background noise).
-6. **24 kHz, 100-mel, Vocos.** Clean but not studio-grade. No emotion / SSML / pause control.
-7. **Long text → memory grows.** The app now auto-splits into sentence chunks and
-   synthesises each separately, then concatenates — bounding peak memory.
-8. **License respect:** Apache-2.0 source; also respect the training corpora
-   (IndicTTS, Rasa, IISc SYSPIN).
+// 4. Synthesize (on a background thread)
+val audio: FloatArray? = tts.synthesize("नमस्ते दुनिया") { stage, cur, total ->
+    Log.d("DhVaani", "$stage $cur/$total")
+    true
+}
+
+// 5. Play or save
+audio?.let {
+    tts.play(it)
+    DhVaani.writeWav(File(context.cacheDir, "output.wav"), it)
+}
+
+// 6. Release
+tts.close()
+```
 
 ---
 
-## Ethics / consent
+## Ethics / Consent
 
-Voice cloning is sensitive. The app shows a prominent consent + anti-impersonation
-notice and labels output as **"Synthesized by DhVaani"**. **Only clone a voice you
-own or have explicit permission to use.** Cloning someone's voice without consent
-can enable impersonation and is illegal in many jurisdictions.
+Voice cloning is sensitive. **Only clone a voice you own or have explicit permission to use.** Cloning someone's voice without consent can enable impersonation and is illegal in many jurisdictions.
 
 ---
 
 ## License
 
-- Model: Apache-2.0 (`ARTPARK-IISc/DhVaani-0.5`, `k2-fsa/ZipVoice`, `charactr/vocos-mel-24khz`).
-- App code in this repository: Apache-2.0 (see `LICENSE`).
-
-> This project ships the ONNX graphs as **downloaded assets**, not committed
-> binaries, to respect model sizes and licensing.
+- Models: Apache-2.0 (`ARTPARK-IISc/DhVaani-0.5`, `Bbkblo/DhVaani-0.5-MNN`, `k2-fsa/ZipVoice`, `charactr/vocos-mel-24khz`).
+- MNN: Apache-2.0 (`alibaba/MNN`).
+- App code: Apache-2.0 (see `LICENSE`).

@@ -16,3 +16,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "DhVaani"
 include(":app")
+include(":dhvaani")
