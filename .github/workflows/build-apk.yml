@@ -21,11 +21,13 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout
@@ -75,20 +77,23 @@ jobs:
 
       - name: Build debug APK
         run: |
-          set +e
-          gradle assembleDebug --stacktrace > build.log 2>&1
-          EXIT_CODE=$?
-          echo "=== BUILD LOG TAIL ==="
-          tail -n 100 build.log
-          echo "### Gradle Build Output" >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          tail -n 100 build.log >> $GITHUB_STEP_SUMMARY
-          echo '```' >> $GITHUB_STEP_SUMMARY
-          if [ $EXIT_CODE -ne 0 ]; then
-            exit $EXIT_CODE
-          fi
+          set -o pipefail
+          gradle assembleDebug --stacktrace 2>&1 | tee build.log
           echo "--- APK locations ---"
           find app/build/outputs -type f -name '*.apk' 2>/dev/null || echo "(no apk found)"
+
+      # Diagnostic: publish build.log to ci-diag branch on failure
+      - name: Publish build.log on failure
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "ci-diag"
+          git config user.email "ci-diag@example.com"
+          git checkout -b ci-diag || git checkout ci-diag
+          git add -f build.log
+          git commit -m "ci-diag: build.log $(date -u +%s)" || true
+          git push -f origin ci-diag 2>&1 || true
 
       - name: Upload APK as artifact
         uses: actions/upload-artifact@v4
