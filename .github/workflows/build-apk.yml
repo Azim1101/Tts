@@ -44,14 +44,11 @@ jobs:
       - name: Install Android platform 34, build-tools, CMake, NDK
         run: |
           yes | sdkmanager --licenses >/dev/null 2>&1 || true
-          sdkmanager --install "platform-tools" "platforms;android-34" "build-tools;34.0.0" "cmake;3.22.1" "ndk;27.2.12479018"
+          sdkmanager --install "platform-tools" "platforms;android-34" "build-tools;34.0.0" "cmake;3.22.1"
 
       - name: Write local.properties
         run: |
           echo "sdk.dir=$ANDROID_HOME" > local.properties
-          if [ -d "$ANDROID_HOME/ndk/27.2.12479018" ]; then
-            echo "ndk.dir=$ANDROID_HOME/ndk/27.2.12479018" >> local.properties
-          fi
 
       - name: Install Gradle 8.7 and put on PATH
         run: |
@@ -65,17 +62,15 @@ jobs:
         run: python3 -m pip install --quiet numpy huggingface_hub
 
       - name: Fetch MNN prebuilts and headers
-        run: bash scripts/fetch_mnn.sh 2>&1 | tee fetch_mnn.log
+        run: bash scripts/fetch_mnn.sh
 
       - name: Download MNN models into assets
         continue-on-error: true
-        run: bash scripts/download_models.sh 2>&1 | tee download.log
+        run: bash scripts/download_models.sh
 
       - name: Build debug APK
         run: |
-          set -o pipefail
-          gradle assembleDebug --stacktrace 2>&1 | tee build.log
-          echo "gradle exit=${PIPESTATUS[0]}"
+          gradle assembleDebug --stacktrace
           echo "--- APK locations ---"
           find app/build/outputs -type f -name '*.apk' 2>/dev/null || echo "(no apk found)"
 
@@ -85,17 +80,6 @@ jobs:
           name: dhvaani-debug-apk
           path: app/build/outputs/apk/**/*.apk
           if-no-files-found: error
-
-      - name: Upload build logs (always, for troubleshooting)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-logs
-          path: |
-            fetch_mnn.log
-            download.log
-            build.log
-          if-no-files-found: ignore
 
   # Publish a GitHub Release (permanent URL) when a v* tag is pushed.
   release:

@@ -6,22 +6,26 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Layout produced by scripts/fetch_mnn.sh:
 #   src/main/cpp/mnn/include/MNN/...
-#   src/main/cpp/mnn/libs/<ABI>/libMNN.so, libMNN_Express.so, libc++_shared.so
+#   src/main/cpp/mnn/libs/<ABI>/libMNN.so, libc++_shared.so
 set(MNN_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/mnn")
 set(MNN_LIB_DIR "${MNN_ROOT}/libs/${ANDROID_ABI}")
 
 if(NOT EXISTS "${MNN_ROOT}/include/MNN/expr/Module.hpp")
     message(FATAL_ERROR
-        "MNN headers not found at ${MNN_ROOT}/include.\n"
+        "MNN headers not found at ${MNN_ROOT}/include/MNN/expr/Module.hpp.\n"
         "Run:  bash scripts/fetch_mnn.sh   from the repository root.")
 endif()
 
 add_library(MNN SHARED IMPORTED)
 set_target_properties(MNN PROPERTIES IMPORTED_LOCATION "${MNN_LIB_DIR}/libMNN.so")
 
-add_library(MNN_Express SHARED IMPORTED)
-set_target_properties(MNN_Express PROPERTIES
-    IMPORTED_LOCATION "${MNN_LIB_DIR}/libMNN_Express.so")
+if(EXISTS "${MNN_LIB_DIR}/libMNN_Express.so")
+    add_library(MNN_Express SHARED IMPORTED)
+    set_target_properties(MNN_Express PROPERTIES IMPORTED_LOCATION "${MNN_LIB_DIR}/libMNN_Express.so")
+    set(EXTRA_MNN_LIBS MNN_Express)
+else()
+    set(EXTRA_MNN_LIBS "")
+endif()
 
 add_library(dhvaani SHARED
     dhvaani.cpp
@@ -44,7 +48,7 @@ endif()
 
 target_link_libraries(dhvaani
     MNN
-    MNN_Express
+    ${EXTRA_MNN_LIBS}
     android
     log
 )

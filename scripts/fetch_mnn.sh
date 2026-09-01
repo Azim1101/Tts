@@ -18,28 +18,47 @@ URL="https://github.com/alibaba/MNN/releases/download/${MNN_VERSION}/${ZIP}"
 echo "--> Downloading prebuilts: $URL"
 curl -fL --progress-bar -o "$TMP/$ZIP" "$URL"
 unzip -q -o "$TMP/$ZIP" -d "$TMP/libs"
-SRC="$(find "$TMP/libs" -type d -name 'arm64-v8a' | head -1)"
-SRC_PARENT="$(dirname "$SRC")"
 
 for abi in arm64-v8a armeabi-v7a; do
-    [ -d "$SRC_PARENT/$abi" ] || continue
-    mkdir -p "$DEST/libs/$abi"
-    # Required: core + Express (these models contain subgraphs) + libc++_shared
-    for so in libMNN.so libMNN_Express.so libc++_shared.so; do
-        if [ -f "$SRC_PARENT/$abi/$so" ]; then
-            cp -f "$SRC_PARENT/$abi/$so" "$DEST/libs/$abi/"
-        fi
-    done
-    echo "    $abi libs: $(ls "$DEST/libs/$abi" | tr '\n' ' ')"
+    SRC_DIR="$(find "$TMP/libs" -type d -name "$abi" | head -n 1)"
+    if [ -n "$SRC_DIR" ] && [ -d "$SRC_DIR" ]; then
+        mkdir -p "$DEST/libs/$abi"
+        shopt -s nullglob
+        for so in "$SRC_DIR"/*.so; do
+            cp -f "$so" "$DEST/libs/$abi/"
+        done
+        shopt -u nullglob
+        echo "    $abi libs: $(ls "$DEST/libs/$abi" | tr '\n' ' ')"
+    fi
 done
+
+# If libc++_shared.so is missing from arm64-v8a, search elsewhere in the archive
+if [ ! -f "$DEST/libs/arm64-v8a/libc++_shared.so" ]; then
+    CXX="$(find "$TMP/libs" -type f -name 'libc++_shared.so' -path '*arm64*' | head -n 1)"
+    if [ -n "$CXX" ] && [ -f "$CXX" ]; then
+        cp -f "$CXX" "$DEST/libs/arm64-v8a/libc++_shared.so"
+        echo "    arm64-v8a: added libc++_shared.so"
+    fi
+fi
 
 # ---- headers (from the matching source tag) --------------------------------
 echo "--> Downloading MNN headers ($MNN_VERSION)"
 curl -fL --progress-bar -o "$TMP/src.tar.gz" \
     "https://codeload.github.com/alibaba/MNN/tar.gz/refs/tags/${MNN_VERSION}"
-tar xzf "$TMP/src.tar.gz" -C "$TMP" "MNN-${MNN_VERSION}/include"
+tar xzf "$TMP/src.tar.gz" -C "$TMP"
+
+INC_DIR="$(find "$TMP" -type d -path '*/MNN*/include' | head -n 1)"
+if [ -z "$INC_DIR" ]; then
+    INC_DIR="$(find "$TMP" -type d -name 'include' | head -n 1)"
+fi
+
+if [ -z "$INC_DIR" ]; then
+    echo "ERROR: could not find include directory in MNN source archive" >&2
+    exit 1
+fi
+
 rm -rf "$DEST/include"
-mv "$TMP/MNN-${MNN_VERSION}/include" "$DEST/include"
+cp -r "$INC_DIR" "$DEST/include"
 
 echo "==> MNN setup complete"
 echo "    headers: $DEST/include/MNN"
