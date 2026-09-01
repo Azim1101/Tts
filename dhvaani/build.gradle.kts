@@ -6,6 +6,7 @@ plugins {
 android {
     namespace = "zone.dhvaani.tts"
     compileSdk = 34
+    ndkVersion = "26.1.10909125"
 
     defaultConfig {
         minSdk = 24
