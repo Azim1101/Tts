@@ -34,6 +34,12 @@ android {
         }
     }
 
+    packaging {
+        jniLibs {
+            pickFirsts += listOf("**/libc++_shared.so", "**/libMNN.so")
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false

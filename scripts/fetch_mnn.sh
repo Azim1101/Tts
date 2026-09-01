@@ -25,21 +25,16 @@ for abi in arm64-v8a armeabi-v7a; do
         mkdir -p "$DEST/libs/$abi"
         shopt -s nullglob
         for so in "$SRC_DIR"/*.so; do
-            cp -f "$so" "$DEST/libs/$abi/"
+            # Do not copy libc++_shared.so: CMake with ANDROID_STL=c++_shared automatically
+            # provides libc++_shared.so from NDK toolchain, preventing duplicate symbol collisions.
+            if [ "$(basename "$so")" != "libc++_shared.so" ]; then
+                cp -f "$so" "$DEST/libs/$abi/"
+            fi
         done
         shopt -u nullglob
         echo "    $abi libs: $(ls "$DEST/libs/$abi" | tr '\n' ' ')"
     fi
 done
-
-# If libc++_shared.so is missing from arm64-v8a, search elsewhere in the archive
-if [ ! -f "$DEST/libs/arm64-v8a/libc++_shared.so" ]; then
-    CXX="$(find "$TMP/libs" -type f -name 'libc++_shared.so' -path '*arm64*' | head -n 1)"
-    if [ -n "$CXX" ] && [ -f "$CXX" ]; then
-        cp -f "$CXX" "$DEST/libs/arm64-v8a/libc++_shared.so"
-        echo "    arm64-v8a: added libc++_shared.so"
-    fi
-fi
 
 # ---- headers (from the matching source tag) --------------------------------
 echo "--> Downloading MNN headers ($MNN_VERSION)"
