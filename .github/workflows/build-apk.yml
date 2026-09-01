@@ -75,7 +75,18 @@ jobs:
 
       - name: Build debug APK
         run: |
-          gradle assembleDebug --stacktrace --info
+          set +e
+          gradle assembleDebug --stacktrace > build.log 2>&1
+          EXIT_CODE=$?
+          echo "=== BUILD LOG TAIL ==="
+          tail -n 100 build.log
+          echo "### Gradle Build Output" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          tail -n 100 build.log >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          if [ $EXIT_CODE -ne 0 ]; then
+            exit $EXIT_CODE
+          fi
           echo "--- APK locations ---"
           find app/build/outputs -type f -name '*.apk' 2>/dev/null || echo "(no apk found)"
 
