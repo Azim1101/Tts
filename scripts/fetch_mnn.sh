@@ -45,21 +45,11 @@ fi
 echo "--> Downloading MNN headers ($MNN_VERSION)"
 curl -fL --progress-bar -o "$TMP/src.tar.gz" \
     "https://codeload.github.com/alibaba/MNN/tar.gz/refs/tags/${MNN_VERSION}"
-tar xzf "$TMP/src.tar.gz" -C "$TMP"
-
-INC_DIR="$(find "$TMP" -type d -path '*/MNN*/include' | head -n 1)"
-if [ -z "$INC_DIR" ]; then
-    INC_DIR="$(find "$TMP" -type d -name 'include' | head -n 1)"
-fi
-
-if [ -z "$INC_DIR" ]; then
-    echo "ERROR: could not find include directory in MNN source archive" >&2
-    exit 1
-fi
+tar xzf "$TMP/src.tar.gz" -C "$TMP" "MNN-${MNN_VERSION}/include"
 
 rm -rf "$DEST/include"
-mkdir -p "$DEST/include"
-cp -r "$INC_DIR/." "$DEST/include"
+SRC_INC="$(find "$TMP" -type d -name "include" | head -n 1)"
+mv "$SRC_INC" "$DEST/include"
 
 if [ ! -f "$DEST/include/MNN/expr/Module.hpp" ]; then
     echo "ERROR: $DEST/include/MNN/expr/Module.hpp not found!" >&2

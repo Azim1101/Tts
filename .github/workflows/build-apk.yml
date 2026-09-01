@@ -84,12 +84,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          git config user.name "ci-diag"
-          git config user.email "ci-diag@example.com"
-          git checkout -b ci-diag || git checkout ci-diag
-          git add -f build.log
-          git commit -m "ci-diag: build.log $(date -u +%s)" || true
-          git push -f origin ci-diag 2>&1 || true
+          if [ -f build.log ]; then
+            git config user.name "ci-diag"
+            git config user.email "ci-diag@example.com"
+            git checkout -B ci-diag
+            git add -f build.log
+            git commit -m "ci-diag: build.log $(date -u +%s)" || true
+            git push -f origin ci-diag || true
+          fi
 
       - name: Upload APK as artifact
         uses: actions/upload-artifact@v4
