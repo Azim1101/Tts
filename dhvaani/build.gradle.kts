@@ -27,16 +27,9 @@ android {
         }
     }
 
-    sourceSets["main"].jniLibs.srcDirs("src/main/cpp/mnn/libs")
-
-    androidResources {
-        noCompress += listOf("mnn", "bin")
-    }
-
-    packaging {
-        jniLibs {
-            useLegacyPackaging = false
-            pickFirsts += listOf("**/libc++_shared.so")
+    sourceSets {
+        getByName("main") {
+            jniLibs.srcDirs("src/main/cpp/mnn/libs")
         }
     }
 
@@ -44,6 +37,9 @@ android {
         release {
             isMinifyEnabled = false
             consumerProguardFiles("consumer-rules.pro")
+        }
+        debug {
+            isMinifyEnabled = false
         }
     }
 

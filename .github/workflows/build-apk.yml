@@ -44,11 +44,16 @@ jobs:
       - name: Install Android platform 34, build-tools, CMake, NDK
         run: |
           yes | sdkmanager --licenses >/dev/null 2>&1 || true
-          sdkmanager --install "platform-tools" "platforms;android-34" "build-tools;34.0.0" "cmake;3.22.1"
+          sdkmanager --install "platform-tools" "platforms;android-34" "build-tools;34.0.0" "cmake;3.22.1" "ndk;26.3.11579264" || true
 
       - name: Write local.properties
         run: |
           echo "sdk.dir=$ANDROID_HOME" > local.properties
+          NDK_DIR="$(find "$ANDROID_HOME/ndk" -maxdepth 1 -mindepth 1 -type d 2>/dev/null | sort -V | tail -n 1)"
+          if [ -n "$NDK_DIR" ]; then
+            echo "ndk.dir=$NDK_DIR" >> local.properties
+          fi
+          cat local.properties
 
       - name: Install Gradle 8.7 and put on PATH
         run: |
@@ -70,7 +75,7 @@ jobs:
 
       - name: Build debug APK
         run: |
-          gradle assembleDebug --stacktrace
+          gradle assembleDebug --stacktrace --info
           echo "--- APK locations ---"
           find app/build/outputs -type f -name '*.apk' 2>/dev/null || echo "(no apk found)"
 

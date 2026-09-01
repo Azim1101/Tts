@@ -18,7 +18,6 @@ android {
         }
     }
 
-    // Models live in assets/dhvaani/ — never compress them so mmap works directly.
     androidResources {
         noCompress += listOf("mnn", "bin")
     }
@@ -28,14 +27,13 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
         jniLibs {
-            useLegacyPackaging = false
-            pickFirsts += listOf("**/libc++_shared.so")
+            pickFirsts += listOf("**/libc++_shared.so", "**/libMNN.so")
         }
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = true
+            isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
