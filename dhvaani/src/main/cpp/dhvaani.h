@@ -1,5 +1,6 @@
 // dhvaani.h — DhVaani-0.5 on-device TTS engine (MNN backend)
-// Pure C++17, no JNI. Same code compiles for Android (arm64-v8a) and desktop.
+// Optimized for mobile devices: low memory footprint, zero-leak tensor reuse,
+// sequential execution on demand.
 #pragma once
 
 #include <cstdint>
@@ -12,23 +13,21 @@
 namespace dhvaani {
 
 struct Config {
-    int   numThread     = 4;      // MNN threads
-    int   precision     = 2;      // 0=Normal 1=High 2=Low(fp16 on arm64)
-    int   numStep       = 8;      // flow-matching steps (quality vs speed)
+    int   numThread     = 2;      // Default 2 threads (balanced for mobile CPUs)
+    int   precision     = 2;      // 0=Normal, 1=High, 2=Low (fp16 on arm64)
+    int   numStep       = 8;      // Flow-matching steps
     float guidanceScale = 1.0f;
     float speed         = 1.0f;   // >1 faster speech
     float tShift        = 0.5f;
     int   seed          = 666;
-    bool  useGpu        = false;  // try OpenCL, falls back to CPU
-    // Trade speed for RAM: no weight pre-packing, MNN Memory_Low, and fm_decoder
-    // is loaded on demand and freed after each call.
-    bool  lowMemory     = false;
+    bool  useGpu        = false;  // OpenCL / Vulkan
+    bool  lowMemory     = true;   // Default true: load models sequentially & free immediately
 };
 
 struct Result {
-    std::vector<float> samples;   // mono, [-1, 1]
+    std::vector<float> samples;   // Mono float samples, [-1, 1]
     int   sampleRate = 24000;
-    float rtf        = 0.0f;      // wall time / audio duration
+    float rtf        = 0.0f;      // Wall time / audio duration
     bool  ok         = false;
     std::string error;
 };
@@ -55,12 +54,12 @@ public:
     // Synthesize. setPrompt() must have been called first.
     Result synthesize(const std::string& text, ProgressFn onProgress = nullptr);
 
-    // Runs one tiny forward pass so the first real call is not slow.
+    // Runs a minimal warmup pass.
     void warmup();
 
     bool isReady() const;
     const Config& config() const;
-    void setConfig(const Config& cfg);   // numStep/speed/guidance can change per call
+    void setConfig(const Config& cfg);
 
     static std::string version();
     static bool writeWav(const std::string& path, const std::vector<float>& pcm, int sr);

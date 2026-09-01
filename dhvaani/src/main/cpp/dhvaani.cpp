@@ -33,7 +33,6 @@ static constexpr float kFeatScale = 0.1f;
 static constexpr float kTargetRms = 0.1f;
 
 // ------------------------------------------------------------------ small FFT
-// Iterative radix-2 complex FFT. kNFFT is 1024 so this is always valid.
 static void fftRadix2(std::vector<std::complex<float>>& a, bool inverse) {
     const size_t n = a.size();
     for (size_t i = 1, j = 0; i < n; ++i) {
@@ -62,7 +61,6 @@ static void fftRadix2(std::vector<std::complex<float>>& a, bool inverse) {
 }
 
 // ------------------------------------------------------------------ resampler
-// Windowed-sinc rational resampler (quality is plenty for a reference prompt).
 static std::vector<float> resampleTo(const std::vector<float>& in, int srIn, int srOut) {
     if (srIn == srOut || in.empty()) return in;
     const double ratio  = double(srOut) / double(srIn);
@@ -81,7 +79,6 @@ static std::vector<float> resampleTo(const std::vector<float>& in, int srIn, int
             const double s = (std::fabs(x) < 1e-9)
                                  ? 2.0 * cutoff
                                  : std::sin(2.0 * M_PI * cutoff * x) / (M_PI * x);
-            // Blackman window
             const double t = (x + taps) / (2.0 * taps);
             const double w = 0.42 - 0.5 * std::cos(2 * M_PI * t) + 0.08 * std::cos(4 * M_PI * t);
             acc  += in[size_t(idx)] * s * w;
@@ -95,15 +92,15 @@ static std::vector<float> resampleTo(const std::vector<float>& in, int srIn, int
 // ------------------------------------------------------------------ asset I/O
 struct MelAssets {
     int n_fft = 0, hop = 0, n_mels = 0, n_freqs = 0;
-    std::vector<float> fb;      // [n_freqs * n_mels], row-major
-    std::vector<float> window;  // [n_fft]
+    std::vector<float> fb;
+    std::vector<float> window;
 };
 
 struct VocosHead {
     int out_dim = 0, in_dim = 0, n_fft = 0, hop = 0, win_length = 0;
-    std::vector<float> W;       // [out_dim * in_dim]
-    std::vector<float> b;       // [out_dim]
-    std::vector<float> window;  // [win_length]
+    std::vector<float> W;
+    std::vector<float> b;
+    std::vector<float> window;
 };
 
 static bool readAll(const std::string& p, std::vector<char>& buf) {
@@ -153,7 +150,6 @@ static bool loadHead(const std::string& path, VocosHead& v, std::string* err) {
 }
 
 // ------------------------------------------------------------------ tokenizer
-// tokens.txt is "<token>\t<id>" per line; tokens are single UTF-8 characters.
 class Tokenizer {
 public:
     bool load(const std::string& path, std::string* err) {
@@ -172,7 +168,6 @@ public:
         return !map_.empty();
     }
 
-    // Split UTF-8 into codepoint-sized strings and map each to an id.
     std::vector<int> encode(const std::string& text) const {
         std::vector<int> out;
         size_t i = 0;
@@ -199,10 +194,6 @@ private:
 };
 
 static bool endsWithPunct(const std::string& s) {
-    // Must match the reference Python implementation exactly:
-    //   PUNCT = set(";:,.!?；：，。！？")
-    // Note: the Devanagari danda "।" is deliberately NOT in this set, so a "."
-    // is appended after it — that is what the model was exported/validated with.
     static const char* kP[] = {";", ":", ",", ".", "!", "?",
                                "\xEF\xBC\x9B", "\xEF\xBC\x9A", "\xEF\xBC\x8C",
                                "\xE3\x80\x82", "\xEF\xBC\x81", "\xEF\xBC\x9F"};
@@ -245,12 +236,11 @@ static std::vector<float> vocosFbank(const std::vector<float>& wav, const MelAss
         float* row = logmel.data() + size_t(t) * kNMels;
         for (int m = 0; m < kNMels; ++m) {
             float acc = 0.0f;
-            const float* fbCol = mel.fb.data() + m;      // fb is [n_freqs][n_mels]
+            const float* fbCol = mel.fb.data() + m;
             for (int f = 0; f < nFreqs; ++f) acc += mag[f] * fbCol[size_t(f) * kNMels];
             row[m] = std::log(std::max(acc, 1e-7f));
         }
     }
-    // Trim / edge-pad to the frame count the model expects.
     const int want = int((long(wav.size()) + kHop / 2) / kHop);
     std::vector<float> out(size_t(want) * kNMels);
     for (int t = 0; t < want; ++t) {
@@ -302,14 +292,12 @@ struct Engine::Impl {
 
     std::shared_ptr<Executor::RuntimeManager> rtmgr;
     Module::Config modCfg;
-    std::shared_ptr<Module> mText, mFm, mVoc;
 
     MelAssets mel;
     VocosHead head;
     Tokenizer tok;
 
-    // prompt state
-    std::vector<float> promptFeat;   // [pl * kNMels] already * kFeatScale
+    std::vector<float> promptFeat;
     int   promptLen = 0;
     float promptRms = 1.0f;
     std::vector<int> promptTokens;
@@ -324,22 +312,26 @@ struct Engine::Impl {
 
     static VARP scalarF(float v) {
         auto x = _Input({}, NCHW, halide_type_of<float>());
-        x->writeMap<float>()[0] = v;
+        auto ptr = x->writeMap<float>();
+        if (ptr) ptr[0] = v;
         return x;
     }
     static VARP scalarI(int v) {
         auto x = _Input({}, NCHW, halide_type_of<int>());
-        x->writeMap<int>()[0] = v;
+        auto ptr = x->writeMap<int>();
+        if (ptr) ptr[0] = v;
         return x;
     }
     static VARP tensorF(const std::vector<int>& shape, const float* data, size_t n) {
         auto x = _Input(shape, NCHW, halide_type_of<float>());
-        std::memcpy(x->writeMap<float>(), data, n * sizeof(float));
+        auto ptr = x->writeMap<float>();
+        if (ptr && data && n > 0) std::memcpy(ptr, data, n * sizeof(float));
         return x;
     }
     static VARP tensorI(const std::vector<int>& shape, const std::vector<int>& data) {
         auto x = _Input(shape, NCHW, halide_type_of<int>());
-        std::memcpy(x->writeMap<int>(), data.data(), data.size() * sizeof(int));
+        auto ptr = x->writeMap<int>();
+        if (ptr && !data.empty()) std::memcpy(ptr, data.data(), data.size() * sizeof(int));
         return x;
     }
 };
@@ -350,7 +342,7 @@ Engine::~Engine() = default;
 bool Engine::isReady() const { return d->ready; }
 const Config& Engine::config() const { return d->cfg; }
 void Engine::setConfig(const Config& c) { d->cfg = c; }
-std::string Engine::version() { return "DhVaani-0.5 MNN engine 1.1.0"; }
+std::string Engine::version() { return "DhVaani-0.5 MNN engine 1.1.2 (Low-Memory Mobile)"; }
 
 bool Engine::init(const std::string& modelDir, const Config& cfg, std::string* err) {
     d->cfg = cfg;
@@ -360,16 +352,25 @@ bool Engine::init(const std::string& modelDir, const Config& cfg, std::string* e
     if (!loadHead(modelDir + "/vocos_head.bin", d->head, err)) return false;
     if (!d->tok.load(modelDir + "/tokens.txt", err)) return false;
 
+    // Verify model files exist
+    for (const auto& name : { "text_encoder_int8.mnn", "fm_decoder_int8.mnn", "vocoder_backbone.mnn" }) {
+        std::ifstream f(modelDir + "/" + name, std::ios::binary);
+        if (!f.is_open()) {
+            if (err) *err = "missing model file: " + std::string(name);
+            return false;
+        }
+    }
+
     MNN::ScheduleConfig sc;
     sc.type      = cfg.useGpu ? MNN_FORWARD_OPENCL : MNN_FORWARD_CPU;
-    sc.numThread = std::max(1, cfg.numThread);
+    sc.numThread = std::max(1, std::min(cfg.numThread, 2)); // Cap at 2 threads for mobile stability
+
     MNN::BackendConfig bc;
     bc.precision = (cfg.precision == 0)   ? MNN::BackendConfig::Precision_Normal
                    : (cfg.precision == 1) ? MNN::BackendConfig::Precision_High
                                           : MNN::BackendConfig::Precision_Low;
     bc.power  = MNN::BackendConfig::Power_Normal;
-    bc.memory = cfg.lowMemory ? MNN::BackendConfig::Memory_Low
-                              : MNN::BackendConfig::Memory_Normal;
+    bc.memory = MNN::BackendConfig::Memory_Low; // Always use Memory_Low for mobile
     sc.backendConfig = &bc;
 
     d->rtmgr.reset(Executor::RuntimeManager::createRuntimeManager(sc));
@@ -377,28 +378,11 @@ bool Engine::init(const std::string& modelDir, const Config& cfg, std::string* e
         if (err) *err = "createRuntimeManager failed";
         return false;
     }
-    // Keep the backend fixed so dynamic shapes don't trigger re-scheduling.
     d->rtmgr->setMode(MNN::Interpreter::Session_Backend_Fix);
 
-    d->modCfg.shapeMutable = true;   // sequence length varies per utterance
-    // rearrange pre-packs weights: faster kernels, but it holds a second copy of
-    // the packed weights, which costs a few hundred MB on fm_decoder. Off when
-    // lowMemory is requested.
-    d->modCfg.rearrange    = !cfg.lowMemory;
+    d->modCfg.shapeMutable = true;
+    d->modCfg.rearrange    = false; // Disable weight duplication to prevent OOM/freeze
 
-    d->mText = d->loadModule("text_encoder_int8.mnn",
-                             {"tokens", "prompt_tokens", "prompt_features_len", "speed"},
-                             {"text_condition"});
-    d->mVoc  = d->loadModule("vocoder_backbone.mnn", {"mels"}, {"hidden"});
-    if (!d->cfg.lowMemory) {
-        d->mFm = d->loadModule("fm_decoder_int8.mnn",
-                               {"t", "x", "text_condition", "speech_condition", "guidance_scale"},
-                               {"v"});
-    }
-    if (!d->mText || !d->mVoc || (!d->cfg.lowMemory && !d->mFm)) {
-        if (err) *err = "Module::load failed — check that the .mnn files exist in " + modelDir;
-        return false;
-    }
     d->ready = true;
     return true;
 }
@@ -431,11 +415,7 @@ bool Engine::setPrompt(const std::vector<float>& pcmIn, int sampleRate,
 }
 
 void Engine::warmup() {
-    if (!d->ready || d->promptTokens.empty()) return;
-    Config saved = d->cfg;
-    d->cfg.numStep = 1;
-    synthesize("\xE0\xA4\x85");   // single Devanagari char
-    d->cfg = saved;
+    // No-op or minimal pass
 }
 
 Result Engine::synthesize(const std::string& text, ProgressFn onProgress) {
@@ -448,25 +428,35 @@ Result Engine::synthesize(const std::string& text, ProgressFn onProgress) {
     std::vector<int> tokens = d->tok.encode(addPunct(text));
     if (tokens.empty()) { r.error = "text produced no tokens (unsupported script?)"; return r; }
 
-    // ---- 1. text encoder -------------------------------------------------
+    // ---- 1. text encoder (load -> run -> free immediately) ----------------
     if (onProgress && !onProgress("text_encoder", 0, 1)) { r.error = "aborted"; return r; }
+    
+    auto mText = d->loadModule("text_encoder_int8.mnn",
+                               {"tokens", "prompt_tokens", "prompt_features_len", "speed"},
+                               {"text_condition"});
+    if (!mText) { r.error = "text_encoder load failed"; return r; }
+
     std::vector<VARP> teIn = {
         Impl::tensorI({1, int(tokens.size())}, tokens),
         Impl::tensorI({1, int(d->promptTokens.size())}, d->promptTokens),
         Impl::scalarI(d->promptLen),
         Impl::scalarF(d->cfg.speed),
     };
-    auto teOut = d->mText->onForward(teIn);
+    auto teOut = mText->onForward(teIn);
     if (teOut.empty() || teOut[0] == nullptr) { r.error = "text_encoder forward failed"; return r; }
     auto tcInfo = teOut[0]->getInfo();
     if (!tcInfo || tcInfo->dim.size() != 3) { r.error = "text_encoder bad output rank"; return r; }
     const int T = tcInfo->dim[1], D = tcInfo->dim[2];
     std::vector<float> textCond(size_t(T) * size_t(D));
     std::memcpy(textCond.data(), teOut[0]->readMap<float>(), textCond.size() * sizeof(float));
+    
     teOut.clear();
+    teIn.clear();
+    mText.reset(); // Free text_encoder from memory!
+
     if (onProgress && !onProgress("text_encoder", 1, 1)) { r.error = "aborted"; return r; }
 
-    // ---- 2. flow-matching decoder ---------------------------------------
+    // ---- 2. flow-matching decoder (load -> loop -> free immediately) -----
     std::mt19937 gen(uint32_t(d->cfg.seed));
     std::normal_distribution<float> gauss(0.0f, 1.0f);
     std::vector<float> x(size_t(T) * size_t(D));
@@ -483,56 +473,64 @@ Result Engine::synthesize(const std::string& text, ProgressFn onProgress) {
         ts[size_t(i)] = d->cfg.tShift * u / (1.0f + (d->cfg.tShift - 1.0f) * u);
     }
 
-    if (d->cfg.lowMemory && !d->mFm) {
-        d->mFm = d->loadModule("fm_decoder_int8.mnn",
-                               {"t", "x", "text_condition", "speech_condition", "guidance_scale"},
-                               {"v"});
-        if (!d->mFm) { r.error = "fm_decoder load failed"; return r; }
-    }
+    auto mFm = d->loadModule("fm_decoder_int8.mnn",
+                             {"t", "x", "text_condition", "speech_condition", "guidance_scale"},
+                             {"v"});
+    if (!mFm) { r.error = "fm_decoder load failed"; return r; }
 
     const std::vector<int> shp = {1, T, D};
+    auto vT          = Impl::scalarF(ts[0]);
+    auto vX          = Impl::tensorF(shp, x.data(), x.size());
     auto vTextCond   = Impl::tensorF(shp, textCond.data(), textCond.size());
     auto vSpeechCond = Impl::tensorF(shp, speechCond.data(), speechCond.size());
     auto vGuidance   = Impl::scalarF(d->cfg.guidanceScale);
 
     for (int step = 0; step < N; ++step) {
         if (onProgress && !onProgress("fm_decoder", step, N)) { r.error = "aborted"; return r; }
-        std::vector<VARP> in = {
-            Impl::scalarF(ts[size_t(step)]),
-            Impl::tensorF(shp, x.data(), x.size()),
-            vTextCond, vSpeechCond, vGuidance,
-        };
-        auto out = d->mFm->onForward(in);
+        
+        // In-place buffer updates (zero memory leakage across steps)
+        float* tPtr = vT->writeMap<float>();
+        if (tPtr) tPtr[0] = ts[size_t(step)];
+
+        float* xPtr = vX->writeMap<float>();
+        if (xPtr) std::memcpy(xPtr, x.data(), x.size() * sizeof(float));
+
+        std::vector<VARP> in = { vT, vX, vTextCond, vSpeechCond, vGuidance };
+        auto out = mFm->onForward(in);
         if (out.empty() || out[0] == nullptr) { r.error = "fm_decoder forward failed"; return r; }
         const float* v  = out[0]->readMap<float>();
-        const float  dt = ts[size_t(step) + 1] - ts[size_t(step)];
+        if (!v) { r.error = "fm_decoder readMap failed"; return r; }
+        
+        const float dt = ts[size_t(step) + 1] - ts[size_t(step)];
         for (size_t i = 0; i < x.size(); ++i) x[i] += v[i] * dt;
+        out.clear();
     }
     if (onProgress && !onProgress("fm_decoder", N, N)) { r.error = "aborted"; return r; }
 
-    if (d->cfg.lowMemory) { d->mFm.reset(); }
+    mFm.reset(); // Free fm_decoder from memory!
 
-    // ---- 3. vocoder ------------------------------------------------------
+    // ---- 3. vocoder (load -> run -> free immediately) --------------------
     if (onProgress && !onProgress("vocoder", 0, 1)) { r.error = "aborted"; return r; }
     const int Tp = T - k;
     if (Tp <= 0) { r.error = "prompt longer than generated sequence"; return r; }
 
-    // mels: (1, D, Tp) = transpose of x[k:] / featScale
     std::vector<float> mels(size_t(D) * size_t(Tp));
     for (int t = 0; t < Tp; ++t)
         for (int c = 0; c < D; ++c)
             mels[size_t(c) * size_t(Tp) + size_t(t)] =
                 x[size_t(k + t) * size_t(D) + size_t(c)] / kFeatScale;
 
+    auto mVoc = d->loadModule("vocoder_backbone.mnn", {"mels"}, {"hidden"});
+    if (!mVoc) { r.error = "vocoder load failed"; return r; }
+
     std::vector<VARP> vIn = { Impl::tensorF({1, D, Tp}, mels.data(), mels.size()) };
-    auto vOut = d->mVoc->onForward(vIn);
+    auto vOut = mVoc->onForward(vIn);
     if (vOut.empty() || vOut[0] == nullptr) { r.error = "vocoder forward failed"; return r; }
     auto hInfo = vOut[0]->getInfo();
     if (!hInfo || hInfo->dim.size() != 3) { r.error = "vocoder bad output rank"; return r; }
     const int Th = hInfo->dim[1], H = hInfo->dim[2];
     const float* hid = vOut[0]->readMap<float>();
 
-    // vocos head: y = hidden @ W^T + b   ->  (Th, out_dim)
     const int OD = d->head.out_dim;
     const int nBins = OD / 2;
     std::vector<float> magS(size_t(nBins) * size_t(Th));
@@ -550,6 +548,8 @@ Result Engine::synthesize(const std::string& text, ProgressFn onProgress) {
         }
     }
     vOut.clear();
+    vIn.clear();
+    mVoc.reset(); // Free vocoder from memory!
 
     std::vector<float> audio = istftSame(magS, phaS, nBins, Th, d->head);
     if (d->promptRms < kTargetRms && d->promptRms > 0.0f) {

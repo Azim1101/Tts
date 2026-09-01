@@ -39,7 +39,7 @@ class MainActivity : AppCompatActivity() {
     private var tts: DhVaani? = null
     private var currentToast: Toast? = null
 
-    // Synthesis parameters (fast, balanced preset)
+    // Balanced synthesis preset (8 Euler steps)
     private val steps: Int = 8
     private val guidance: Float = 1.0f
     private val speed: Float = 1.0f
@@ -63,7 +63,7 @@ class MainActivity : AppCompatActivity() {
 
         setupListeners()
 
-        // Kick off model loading off the UI thread immediately.
+        // Initialize engine off the UI thread
         status(getString(R.string.status_loading_models))
         executor.execute { loadModels() }
     }
@@ -178,7 +178,6 @@ class MainActivity : AppCompatActivity() {
 
         executor.execute {
             try {
-                // Set reference voice
                 if (!engine.setPrompt(ref, refSampleRate, transcript)) {
                     val err = engine.lastError()
                     val msg = when {
@@ -270,7 +269,6 @@ class MainActivity : AppCompatActivity() {
             if (allPresentInDir) {
                 engine = DhVaani.fromDirectory(modelDir)
             } else {
-                // Try assets/dhvaani/ extraction
                 val hasAssets = runCatching {
                     assets.open("dhvaani/tokens.txt").close()
                     true
@@ -291,7 +289,6 @@ class MainActivity : AppCompatActivity() {
                 return
             }
 
-            // If not found, trigger download
             runOnUiThread {
                 status(getString(R.string.err_models_missing))
                 binding.btnDownloadModels.visibility = View.VISIBLE

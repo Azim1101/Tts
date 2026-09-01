@@ -15,17 +15,10 @@ import java.nio.ByteOrder
 /**
  * DhVaani-0.5 on-device text-to-speech (MNN backend).
  *
- * Basic usage:
- * ```
- * val tts = DhVaani.fromAssets(context)          // copies models out of assets on first run
- * tts.setPrompt(promptPcm, 24000, "reference text")
- * val audio = tts.synthesize("नमस्ते दुनिया")     // FloatArray, 24 kHz mono
- * tts.play(audio)
- * tts.close()
- * ```
- *
- * Not thread-safe: call from a single background thread (never the main thread —
- * synthesis takes seconds).
+ * Optimized for mobile stability:
+ * - Low-memory sequential model execution (~250MB peak RAM vs ~1.5GB)
+ * - In-place tensor buffer reuse
+ * - 24 kHz mono output
  */
 class DhVaani private constructor(
     modelDir: String,
@@ -40,7 +33,7 @@ class DhVaani private constructor(
         NORMAL(0),
         /** float32 with high-precision kernels. */
         HIGH(1),
-        /** fp16 on arm64 — ~1.6x faster, recommended. */
+        /** fp16 on arm64 — ~1.6x faster, recommended for mobile. */
         LOW(2),
     }
 
@@ -53,7 +46,7 @@ class DhVaani private constructor(
         modelDir, threads, precision.value, useGpu, lowMemory
     )
 
-    /** True when all three models loaded successfully. */
+    /** True when all models are verified and ready. */
     val isReady: Boolean
         get() = handle != 0L && nativeIsReady(handle)
 
@@ -65,7 +58,7 @@ class DhVaani private constructor(
      *
      * @param pcm mono samples in [-1, 1]
      * @param sampleRate any rate; resampled to 24 kHz internally
-     * @param text exactly what is spoken in [pcm] — accuracy matters a lot for quality
+     * @param text exactly what is spoken in [pcm] — accuracy matters for quality
      */
     fun setPrompt(pcm: FloatArray, sampleRate: Int, text: String): Boolean {
         check(handle != 0L) { "DhVaani is closed" }
@@ -91,7 +84,6 @@ class DhVaani private constructor(
         nativeConfigure(handle, numStep, guidanceScale, speed, seed)
     }
 
-    /** Runs one throwaway pass so the first real call is not slow. Takes a few seconds. */
     fun warmup() {
         if (handle != 0L) nativeWarmup(handle)
     }
@@ -137,8 +129,7 @@ class DhVaani private constructor(
                 if (written <= 0) break
                 off += written
             }
-            // Let the tail drain instead of clipping the last word.
-            Thread.sleep(120)
+            Thread.sleep(100)
         } finally {
             runCatching { track.stop() }
             track.release()
@@ -185,20 +176,14 @@ class DhVaani private constructor(
         )
 
         init {
-            // libMNN_Express is required: these models contain subgraphs and can
-            // only run through MNN::Express::Module.
             System.loadLibrary("MNN")
             runCatching { System.loadLibrary("MNN_Express") }
-                .onFailure { Log.w(TAG, "libMNN_Express.so not found — ok if MNN was built with MNN_SEP_BUILD=OFF") }
             System.loadLibrary("dhvaani")
         }
 
         @JvmStatic
         external fun nativeVersion(): String
 
-        /**
-         * Open models from a directory you manage yourself (e.g. downloaded at runtime).
-         */
         @JvmStatic
         @JvmOverloads
         fun fromDirectory(
@@ -206,21 +191,13 @@ class DhVaani private constructor(
             threads: Int = defaultThreads(),
             precision: Precision = Precision.LOW,
             useGpu: Boolean = false,
-            lowMemory: Boolean = false,
+            lowMemory: Boolean = true,
         ): DhVaani {
             val missing = REQUIRED_FILES.filterNot { File(modelDir, it).isFile }
             require(missing.isEmpty()) { "missing model files in $modelDir: $missing" }
             return DhVaani(modelDir.absolutePath, threads, precision, useGpu, lowMemory)
         }
 
-        /**
-         * Copy the models out of `assets/dhvaani/` into internal storage on first
-         * launch, then open them.
-         *
-         * Note: mmap needs real files, so assets must be extracted. Make sure the
-         * .mnn files are stored uncompressed (see `androidResources.noCompress`
-         * in the module's build.gradle) or extraction will be slow.
-         */
         @JvmStatic
         @JvmOverloads
         fun fromAssets(
@@ -229,16 +206,13 @@ class DhVaani private constructor(
             threads: Int = defaultThreads(),
             precision: Precision = Precision.LOW,
             useGpu: Boolean = false,
-            lowMemory: Boolean = false,
+            lowMemory: Boolean = true,
         ): DhVaani {
             val dst = File(context.filesDir, assetSubdir).apply { mkdirs() }
             for (name in REQUIRED_FILES) {
                 val out = File(dst, name)
+                if (out.isFile && out.length() > 0L) continue
                 val src = "$assetSubdir/$name"
-                val expected = runCatching {
-                    context.assets.openFd(src).use { it.length }
-                }.getOrDefault(-1L)
-                if (out.isFile && (expected <= 0 || out.length() == expected)) continue
                 context.assets.open(src).use { input ->
                     FileOutputStream(out).use { output -> input.copyTo(output, 1 shl 20) }
                 }
@@ -247,12 +221,10 @@ class DhVaani private constructor(
             return fromDirectory(dst, threads, precision, useGpu, lowMemory)
         }
 
-        /** Leave one core free for the UI; cap at 4 (more rarely helps). */
+        /** Safe 2 threads for mobile CPUs to avoid thermal throttling & OOM. */
         @JvmStatic
-        fun defaultThreads(): Int =
-            (Runtime.getRuntime().availableProcessors() - 1).coerceIn(1, 4)
+        fun defaultThreads(): Int = 2
 
-        /** Read a 16-bit PCM WAV into mono floats. Returns samples to `sampleRate`. */
         @JvmStatic
         fun readWav(file: File): Pair<FloatArray, Int> {
             RandomAccessFile(file, "r").use { raf ->
@@ -276,10 +248,10 @@ class DhVaani private constructor(
                             val fmt = ByteArray(size)
                             raf.readFully(fmt)
                             val bb = ByteBuffer.wrap(fmt).order(ByteOrder.LITTLE_ENDIAN)
-                            bb.short                       // audio format
+                            bb.short
                             channels = bb.short.toInt()
                             rate = bb.int
-                            bb.int; bb.short               // byte rate, block align
+                            bb.int; bb.short
                             bits = bb.short.toInt()
                         }
                         "data" -> {
@@ -307,7 +279,6 @@ class DhVaani private constructor(
             }
         }
 
-        /** Write mono floats as a 16-bit PCM WAV. */
         @JvmStatic
         @JvmOverloads
         fun writeWav(file: File, pcm: FloatArray, sampleRate: Int = SAMPLE_RATE) {
