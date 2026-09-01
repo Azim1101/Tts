@@ -10,7 +10,7 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
 echo "==> Fetching MNN $MNN_VERSION -> $DEST"
-mkdir -p "$DEST/include" "$DEST/libs"
+mkdir -p "$DEST/libs"
 
 # ---- prebuilt .so (official release asset) ---------------------------------
 ZIP="mnn_${MNN_VERSION}_android_armv7_armv8_cpu_opencl_vulkan.zip"
@@ -58,7 +58,13 @@ if [ -z "$INC_DIR" ]; then
 fi
 
 rm -rf "$DEST/include"
-cp -r "$INC_DIR" "$DEST/include"
+mkdir -p "$DEST/include"
+cp -r "$INC_DIR/." "$DEST/include"
+
+if [ ! -f "$DEST/include/MNN/expr/Module.hpp" ]; then
+    echo "ERROR: $DEST/include/MNN/expr/Module.hpp not found!" >&2
+    exit 1
+fi
 
 echo "==> MNN setup complete"
 echo "    headers: $DEST/include/MNN"
